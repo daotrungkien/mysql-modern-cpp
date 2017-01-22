@@ -50,7 +50,7 @@ Queries can be passed using convenient printf-style, and optional type can be us
 	else cout << "No max weight value" << endl;
 
 
-Example showing how to getting back multiple typed values in a row:
+Example showing how to getting back multiple typed values in a row, optional type is also used to handle nullable values:
 
 	auto res = my.query("select id, name, weight from person where id = %d", 3);
 
@@ -63,7 +63,7 @@ Example showing how to getting back multiple typed values in a row:
 	if (weight) cout << ", weight: " << *weight;
 	cout << endl;
 
-A multi-row data query using lambda function with row fields in parameter. Note that optional type can also be used, and datetime is a supporting type is used for handing date and time:
+A multi-row data query using lambda function with row fields in parameter. Note that optional type can be used here as well, and datetime is a supporting type is used for handing date and time:
 
 	my.query("select id, name, weight, birthday from person")
 		.each([](int id, string name, optional_type<double> weight, optional_type<datetime> birthday) {

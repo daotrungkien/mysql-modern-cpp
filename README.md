@@ -8,11 +8,11 @@ Completely free. No restriction!
 
 ## Installation:
 - C++11 required
-- Include modern_cpp_mysql.h whereever you want to use
+- `#include <modern_cpp_mysql.h>` whereever you want to use - Not that this is the ONLY step to do!
 - No .cpp, no complied library, no binary needed
 
 ## Credits:
-- std::experimental::optional is done by Andrzej Krzemienski: https://github.com/akrzemi1/Optional
+- `std::experimental::optional` is done by @github/andrzej1: https://github.com/akrzemi1/Optional
 
 ## How to use (by examples):
 Note that in the following example, a table defined as follows is used:
@@ -32,7 +32,6 @@ Note that in the following example, a table defined as follows is used:
 		|  2 | Tran Thi Y   |  56.78 | 1999-05-12 |      3 |
 		|  3 | Bui Xuan Z   |   NULL | NULL       |      5 |
 		+----+--------------+--------+------------+--------+
-
 
 Establishing a connection by constructor, or by connection::open() function:
 

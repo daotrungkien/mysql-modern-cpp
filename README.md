@@ -1,5 +1,5 @@
 # cpp11-mysql
-Modern C++ (C++11, C++14, C++17) wrapper for MySQL with simple and convenient usage
+# Modern C++ (C++11, C++14, C++17) wrapper for MySQL with simple and convenient usage.
 
 Note that in the following example, a table defined as follows is used:
 

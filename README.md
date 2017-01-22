@@ -60,7 +60,7 @@ Queries can be passed using convenient printf-style, and optional type can be us
 						.get_value<optional_type<double>>();
 	if (avg_weight)
 		cout << "Mean weight: " << *avg_weight << endl;
-	else cout << "No max weight value" << endl;
+	else cout << "No mean weight value" << endl;
 ```
 
 Example showing how to getting back multiple typed values in a row, optional type is also used to handle nullable values:

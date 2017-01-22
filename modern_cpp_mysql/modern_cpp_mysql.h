@@ -1,6 +1,6 @@
 /*
 
-Modern C++ wrapper for MySQL
+Modern C++ wrapper for MySQL with simple and convenient usage
 Version: 0.9.0.0
 Date: 2017 Jan 22
 
@@ -306,14 +306,14 @@ namespace daotk {
 				return mysql_num_fields(res);
 			}
 
-			// return true if the executed 
+			// return true if query was executed successfully
 			operator bool() const {
-				return res != nullptr;
+				return my_conn != nullptr;
 			}
 
 			// return true if row has not been fetched with data
 			bool is_empty() const {
-				return row == nullptr;
+				return res == nullptr || count() == 0;
 			}
 
 			// go to first row and fetch data

@@ -1,4 +1,4 @@
-#include "modern_cpp_mysql\modern_cpp_mysql.h"
+#include "..\modern_cpp_mysql\modern_cpp_mysql.h"
 #include <iostream>
 
 

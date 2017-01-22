@@ -12,7 +12,7 @@ Completely free. No restriction!
 - No .cpp, no complied library, no binary needed
 
 ## Credits:
-- `std::experimental::optional` is done by @github/andrzej1: https://github.com/akrzemi1/Optional
+- `std::experimental::optional` is done by @github/akrzemi1: https://github.com/akrzemi1/Optional
 
 ## How to use (by examples):
 Note that in the following example, a table defined as follows is used:

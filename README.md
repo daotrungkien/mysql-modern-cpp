@@ -3,10 +3,16 @@
 ## Description:
 This is a lightweight wrapper for MySQL with simple and convenient usage in modern C++ (C++11, C++14, C++17).
 
+## License:
+Completely free. No restriction!
+
 ## Installation:
 - C++11 required
 - Include modern_cpp_mysql.h whereever you want to use
 - No .cpp, no complied library, no binary needed
+
+## Credits:
+- std::experimental::optional is done by Andrzej Krzemienski: https://github.com/akrzemi1/Optional
 
 ## How to use (by examples):
 Note that in the following example, a table defined as follows is used:

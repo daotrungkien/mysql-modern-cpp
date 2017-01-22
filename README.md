@@ -8,7 +8,7 @@ Completely free. No restriction!
 
 ## Installation:
 - C++11 required
-- `#include <modern_cpp_mysql.h>` whereever you want to use - Not that this is the ONLY step to do!
+- `#include <modern_cpp_mysql.h>` whereever you want to use - Note that this is the ONLY step to do, nothing else needed!
 - No .cpp, no complied library, no binary needed
 
 ## Credits:

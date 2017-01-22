@@ -34,37 +34,37 @@ Note that in the following example, a table defined as follows is used:
 		+----+--------------+--------+------------+--------+
 
 Establishing a connection by constructor, or by connection::open() function:
-
+```cpp
 	connection my("db4free.net", "kien", "kienkien", "kien");
 	if (!my) {
 		cout << "Connection failed" << endl;
 		return;
 	}
-
+```
 Example of simple query, without getting any value back (the returned object when not assigned is automatically destroyed):
-
+```cpp
 	if (my.query("update person set avatar = floor(rand()*10)"))
 		cout << "Successful" << endl;
 	else cout << "Failed" << endl;
-
+```
 Simple query and simple way to get back a single value:
-
+```cpp
 	auto row_count = my.query("select count(*) from person")
 						.get_value<int>();
 	cout << "Count: " << row_count << endl;
-
+```
 
 Queries can be passed using convenient printf-style, and optional type can be used to know whether the returned value is available:
-
+```cpp
 	auto avg_weight = my.query("select avg(weight) from person where avatar >= %d or weight <= %f", 2, 70.5)
 						.get_value<optional_type<double>>();
 	if (avg_weight)
 		cout << "Mean weight: " << *avg_weight << endl;
 	else cout << "No max weight value" << endl;
-
+```
 
 Example showing how to getting back multiple typed values in a row, optional type is also used to handle nullable values:
-
+```cpp
 	auto res = my.query("select id, name, weight from person where id = %d", 3);
 
 	int id;
@@ -75,9 +75,9 @@ Example showing how to getting back multiple typed values in a row, optional typ
 	cout << "ID: " << id << ", name: " << name;
 	if (weight) cout << ", weight: " << *weight;
 	cout << endl;
-
+```
 A multi-row data query using lambda function with row fields in parameter. Note that optional type can be used here as well, and datetime is a supporting type is used for handing date and time:
-
+```cpp
 	my.query("select id, name, weight, birthday from person")
 		.each([](int id, string name, optional_type<double> weight, optional_type<datetime> birthday) {
 			cout << "ID: " << id << ", name: " << name;
@@ -88,10 +88,10 @@ A multi-row data query using lambda function with row fields in parameter. Note 
 			// return true to continue, false to stop
 			return true;
 		});
-
+```
 
 Another way to iterate through rows using a container-like object:
-
+```cpp
 	res = my.query("select id, name, weight from person");
 	auto ctn = res.as_container<int, string, optional_type<double>>();
 	for (auto row : ctn) {
@@ -101,3 +101,4 @@ Another way to iterate through rows using a container-like object:
 		if (weight) cout << ", weight: " << *weight;
 		cout << endl;
 	}
+```

@@ -7,7 +7,7 @@ This is a lightweight wrapper for MySQL with simple and convenient usage in mode
 Completely free. No restriction!
 
 ## Requirements:
-- C++14 ready compiler (MSVC 2015, g++ 5.1, clang 3.8)
+- C++11 ready compiler - please check if your compiler is up to date (at the moment: MSVC 2015, g++ 5.1, clang 3.8)
 - MySQL Connector/C:
 	+ For Windows: https://dev.mysql.com/downloads/connector/c/
 	+ For Linux: `sudo apt-get install libmysqlclient-dev`

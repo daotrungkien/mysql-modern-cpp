@@ -89,10 +89,7 @@ A multi-row data query using lambda function with row fields in parameter. Note 
 ```cpp
 	my.query("select id, name, weight, birthday from person")
 		.each([](int id, string name, optional_type<double> weight, optional_type<datetime> birthday) {
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			if (birthday) cout << ", birthday: " << birthday->to_sql();
-			cout << endl;
+			// ...
 
 			// return true to continue, false to stop
 			return true;
@@ -103,13 +100,20 @@ Another way to iterate through rows using a container-like object:
 ```cpp
 	res = my.query("select id, name, weight from person");
 	if (res) {
-		auto ctn = res.as_container<int, string, optional_type<double>>();
-		for (auto row : ctn) {
+		for (auto row : res.as_container<int, string, optional_type<double>>()) {
 			tie(id, name, weight) = row;
-
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
+			// ...
 		}
+	}
+```
+
+
+Of course, the-old-good-time-style loop is also possible:
+```cpp
+	res = my.query("select id, name, weight from person");
+	while (!res.eof()) {
+		res.fetch(id, name, weight);
+		// ...
+		res.next();
 	}
 ```

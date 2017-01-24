@@ -1,4 +1,4 @@
-#include "../mysql++11/mysql++11.h"
+#include "mysql++11/mysql++11.h"
 #include <iostream>
 
 
@@ -115,13 +115,31 @@ int main()
 
 	// another way to iterate through rows using a container-like object
 	res = my.query("select id, name, weight from person");
-	auto ctn = res.as_container<int, string, optional_type<double>>();
-	for (auto row : ctn) {
-		tie(id, name, weight) = row;
+	if (res) {
+		for (auto& row : res.as_container<int, string, optional_type<double>>()) {
+			tie(id, name, weight) = row;
+
+			cout << "ID: " << id << ", name: " << name;
+			if (weight) cout << ", weight: " << *weight;
+			cout << endl;
+		}
+	}
+
+
+
+
+	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+
+	// of course, the-old-good-time-style loop is also possible:
+	res = my.query("select id, name, weight from person");
+	while (!res.eof()) {
+		res.fetch(id, name, weight);
 
 		cout << "ID: " << id << ", name: " << name;
 		if (weight) cout << ", weight: " << *weight;
 		cout << endl;
+
+		res.next();
 	}
 
 	return 0;

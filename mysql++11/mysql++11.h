@@ -299,9 +299,16 @@ namespace daotk {
 				return my_conn != nullptr;
 			}
 
-			// return true if row has not been fetched with data
+			// return true if no data was returned
 			bool is_empty() const {
 				return res == nullptr || count() == 0;
+			}
+
+			// return true if passed the last row
+			bool eof() {
+				if (is_empty()) return true;
+				if (!started) reset();
+				return row == nullptr;
 			}
 
 			// go to first row and fetch data

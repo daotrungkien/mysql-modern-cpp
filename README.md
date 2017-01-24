@@ -38,7 +38,7 @@ Note that in the following examples, a table defined as follows is used:
 		|  3 | Bui Xuan Z   |   NULL | NULL       |      5 |
 		+----+--------------+--------+------------+--------+
 ```
-First, `#include <modern_cpp_mysql.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
+First, `#include <mysql++11.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
 
 Establishing a connection by constructor, or by connection::open() function:
 ```cpp

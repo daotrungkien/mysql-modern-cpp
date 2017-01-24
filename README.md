@@ -9,8 +9,8 @@ Completely free. No restriction!
 ## Requirements:
 - C++14 ready compiler (MSVC 2015, g++ 5.1, clang 3.8)
 - MySQL Connector/C:
-+ For Windows: https://dev.mysql.com/downloads/connector/c/
-+ For Linux: `sudo apt-get install libmysqlclient-dev`
+	+ For Windows: https://dev.mysql.com/downloads/connector/c/
+	+ For Linux: `sudo apt-get install libmysqlclient-dev`
 - No .cpp, no compiled library, no binary needed
 
 ## Credits:

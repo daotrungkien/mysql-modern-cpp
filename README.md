@@ -7,9 +7,8 @@ This is a lightweight wrapper for MySQL with simple and convenient usage in mode
 Completely free. No restriction!
 
 ## Installation:
-- C++11 required
-- Download MySQL Connector/C if you did not: https://dev.mysql.com/downloads/connector/c/
-- `#include <modern_cpp_mysql.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
+- C++11 required - check if your compiler is up to date
+- MySQL Connector/C - download here if you have not: https://dev.mysql.com/downloads/connector/c/
 - No .cpp, no compiled library, no binary needed
 
 ## Credits:
@@ -33,6 +32,8 @@ Note that in the following example, a table defined as follows is used:
 		|  2 | Tran Thi Y   |  56.78 | 1999-05-12 |      3 |
 		|  3 | Bui Xuan Z   |   NULL | NULL       |      5 |
 		+----+--------------+--------+------------+--------+
+
+First, `#include <modern_cpp_mysql.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
 
 Establishing a connection by constructor, or by connection::open() function:
 ```cpp

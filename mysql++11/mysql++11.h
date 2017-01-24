@@ -19,26 +19,28 @@ Macro Flags:
 #pragma once
 
 
-#ifdef WIN32
+#ifdef _MSC_VER
 	#include <winsock.h>
 #endif
 
-#include <mysql.h>
-#include <errmsg.h>
+#include <mysql/mysql.h>
+#include <mysql/errmsg.h>
 
 #include <string>
 #include <ctime>
-#include <time.h>
 #include <mutex>
 #include <vector>
-#include "polyfill\function_traits.h"
-#include "polyfill\datetime.h"
+#include <memory>
+#include <stdarg.h>
+
+#include "polyfill/function_traits.h"
+#include "polyfill/datetime.h"
 
 
 #ifdef STD_OPTIONAL
 	#include <optional>
 #else
-	#include "polyfill\optional.hpp"
+	#include "polyfill/optional.hpp"
 #endif
 
 
@@ -73,22 +75,13 @@ namespace daotk {
 
 			template <int I>
 			typename std::enable_if<(I > 0), void>::type
-			fetch_impl() {
-				res->get_value(I, std::get<I>(*data));
-				fetch_impl<I - 1>();
-			}
+			fetch_impl();
 
 			template <int I>
 			typename std::enable_if<(I == 0), void>::type
-			fetch_impl() {
-				res->get_value(I, std::get<I>(*data));
-			}
+			fetch_impl();
 
-			void fetch() {
-				res->seek(row_index);
-				data = std::make_shared<std::tuple<Values...>>();
-				fetch_impl<sizeof...(Values) - 1>();
-			}
+			void fetch();
 
 			void set_index(unsigned long long i) {
 				row_index = i;
@@ -217,13 +210,8 @@ namespace daotk {
 			{}
 
 		public:
-			result_iterator<Values...> begin() {
-				return result_iterator<Values...>{res, 0};
-			}
-
-			result_iterator<Values...> end() {
-				return result_iterator<Values...>{res, res->count()};
-			}
+			result_iterator<Values...> begin();
+			result_iterator<Values...> end();
 		};
 
 
@@ -534,7 +522,7 @@ namespace daotk {
 
 			template <typename Value>
 			void get_value(optional_type<Value>& value) {
-				get_value(0, v);
+				get_value(0, value);
 			}
 
 			template <typename Value>
@@ -652,23 +640,21 @@ namespace daotk {
 
 		protected:
 			results query(const std::string& fmt_str, va_list args) {
-				size_t size = 512;
-				char stackbuf[512];
-				std::vector<char> dynamicbuf;
-				char* buf = &stackbuf[0];
+				size_t size = 256;
+				std::vector<char> dynamicbuf(size);
+				char* buf = &dynamicbuf[0];
 				va_list ap_copy;
 
 				while (true) {
 					// Try to vsnprintf into our buffer.
 					va_copy(ap_copy, args);
-					int needed = vsnprintf_s(buf, size, size, fmt_str.c_str(), args);
+					int needed = std::vsnprintf(buf, size, fmt_str.c_str(), args);
 					va_end(ap_copy);
 
 					// NB. C99 (which modern Linux and OS X follow) says vsnprintf
 					// failure returns the length it would have needed.  But older
 					// glibc and current Windows return -1 for failure, i.e., not
 					// telling us how much was needed.
-
 					if (needed <= (int)size && needed >= 0) {
 						// It fit fine so we're done.
 						return query(buf);
@@ -697,16 +683,60 @@ namespace daotk {
 				return results{ my_conn, mysql_store_result(my_conn) };
 			}
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wvarargs"
+#endif
 			// execute printf-style query
-			template <typename... Args>
-			typename std::enable_if<(sizeof...(Args) > 0), results>::type
-			query(std::string fmt_str, Args...) {
+			template <typename Arg>
+			results query(std::string fmt_str, Arg,...) {
 				va_list args;
 				va_start(args, fmt_str);
 				results res = query(fmt_str, args);
 				va_end(args);
 				return std::move(res);
 			}
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 		};
+
+
+
+
+
+
+		template <typename... Values>
+		template <int I>
+		typename std::enable_if<(I > 0), void>::type
+		result_iterator<Values...>::fetch_impl() {
+			res->get_value(I, std::get<I>(*data));
+			fetch_impl<I - 1>();
+		}
+
+		template <typename... Values>
+		template <int I>
+		typename std::enable_if<(I == 0), void>::type
+		result_iterator<Values...>::fetch_impl() {
+			res->get_value(I, std::get<I>(*data));
+		}
+
+		template <typename... Values>
+		void result_iterator<Values...>::fetch() {
+			res->seek(row_index);
+			data = std::make_shared<std::tuple<Values...>>();
+			fetch_impl<sizeof...(Values) - 1>();
+		}
+
+
+		template <typename... Values>
+		result_iterator<Values...> result_containter<Values...>::begin() {
+			return result_iterator<Values...>{res, 0};
+		}
+
+		template <typename... Values>
+		result_iterator<Values...> result_containter<Values...>::end() {
+			return result_iterator<Values...>{res, res->count()};
+		}
 	}
 }

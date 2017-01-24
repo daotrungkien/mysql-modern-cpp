@@ -1,22 +1,25 @@
-# cpp11-mysql
+# mysql++11
 
 ## Description:
-This is a lightweight wrapper for MySQL with simple and convenient usage in modern C++ (C++11, C++14, C++17).
+This is a lightweight wrapper for MySQL with simple and convenient usage in modern C++ (C++14, C++17).
 
 ## License:
 Completely free. No restriction!
 
-## Installation:
-- C++11 required - check if your compiler is up to date
-- MySQL Connector/C - download here if you have not: https://dev.mysql.com/downloads/connector/c/
+## Requirements:
+- C++14 ready compiler (MSVC 2015, g++ 5.1, clang 3.8)
+- MySQL Connector/C:
++ For Windows: https://dev.mysql.com/downloads/connector/c/
++ For Linux: `sudo apt-get install libmysqlclient-dev`
 - No .cpp, no compiled library, no binary needed
 
 ## Credits:
-- `std::experimental::optional` is done by @github/akrzemi1: https://github.com/akrzemi1/Optional
+- `sqlite::utility::function_traits` is from @github/aminroosta/sqlite_modern_cpp: https://github.com/aminroosta/sqlite_modern_cpp
+- `std::experimental::optional` is from @github/akrzemi1/Optional: https://github.com/akrzemi1/Optional
 
 ## How to use (by examples):
-Note that in the following example, a table defined as follows is used:
-
+Note that in the following examples, a table defined as follows is used:
+```sql
 		create table(
 			id unsigned int auto_increment primary key,
 			name varchar(50),
@@ -24,7 +27,9 @@ Note that in the following example, a table defined as follows is used:
 			birthday date,
 			avatar int);
 		);
+```
 
+```
 		+----+--------------+--------+------------+--------+
 		| id | name         | weight | birthday   | avatar |
 		+----+--------------+--------+------------+--------+
@@ -32,7 +37,7 @@ Note that in the following example, a table defined as follows is used:
 		|  2 | Tran Thi Y   |  56.78 | 1999-05-12 |      3 |
 		|  3 | Bui Xuan Z   |   NULL | NULL       |      5 |
 		+----+--------------+--------+------------+--------+
-
+```
 First, `#include <modern_cpp_mysql.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
 
 Establishing a connection by constructor, or by connection::open() function:
@@ -67,16 +72,18 @@ Queries can be passed using convenient printf-style, and optional type can be us
 
 Example showing how to getting back multiple typed values in a row, optional type is also used to handle nullable values:
 ```cpp
-	auto res = my.query("select id, name, weight from person where id = %d", 3);
-
 	int id;
 	string name;
 	optional_type<double> weight;
-	res.fetch(id, name, weight);
 
-	cout << "ID: " << id << ", name: " << name;
-	if (weight) cout << ", weight: " << *weight;
-	cout << endl;
+	auto res = my.query("select id, name, weight from person where id = %d", 3);
+	if (res) {
+		res.fetch(id, name, weight);
+
+		cout << "ID: " << id << ", name: " << name;
+		if (weight) cout << ", weight: " << *weight;
+		cout << endl;
+	}
 ```
 A multi-row data query using lambda function with row fields in parameter. Note that optional type can be used here as well, and datetime is a supporting type is used for handing date and time:
 ```cpp
@@ -95,12 +102,14 @@ A multi-row data query using lambda function with row fields in parameter. Note 
 Another way to iterate through rows using a container-like object:
 ```cpp
 	res = my.query("select id, name, weight from person");
-	auto ctn = res.as_container<int, string, optional_type<double>>();
-	for (auto row : ctn) {
-		tie(id, name, weight) = row;
+	if (res) {
+		auto ctn = res.as_container<int, string, optional_type<double>>();
+		for (auto row : ctn) {
+			tie(id, name, weight) = row;
 
-		cout << "ID: " << id << ", name: " << name;
-		if (weight) cout << ", weight: " << *weight;
-		cout << endl;
+			cout << "ID: " << id << ", name: " << name;
+			if (weight) cout << ", weight: " << *weight;
+			cout << endl;
+		}
 	}
 ```

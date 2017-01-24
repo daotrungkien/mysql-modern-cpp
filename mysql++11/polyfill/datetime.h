@@ -3,6 +3,8 @@
 
 #include <sstream>
 #include <iomanip>
+#include <time.h>
+#include <string.h>
 
 
 namespace daotk {
@@ -21,7 +23,11 @@ namespace daotk {
 
 			datetime(time_t ts) {
 				tm t;
+#ifdef _MSC_VER
 				localtime_s(&t, &ts);
+#else
+				localtime_r(&ts, &t);
+#endif
 				year = t.tm_year;
 				month = t.tm_mon;
 				day = t.tm_mday;

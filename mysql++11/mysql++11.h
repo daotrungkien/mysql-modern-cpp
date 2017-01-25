@@ -648,22 +648,32 @@ namespace daotk {
 			}
 
 		protected:
-			results query_impl(const std::string& fmt_str, va_list args) {
+			results query_impl(const char* fmt_str, va_list args) {
 				size_t size = 256;
 				std::vector<char> buf(size);
 
 				while (true) {
-					int needed = std::vsnprintf(&buf[0], size, fmt_str.c_str(), args);
+					int needed = std::vsnprintf(&buf[0], size, fmt_str, args);
 
 					if (needed <= (int)size && needed >= 0)
-						return query_impl(&buf[0]);
+						return query(&buf[0]);
 
 					size = (needed > 0) ? (needed + 1) : (size * 2);
 					buf.resize(size);
 				}
 			}
 
-			results query_impl(const std::string& query_str) {
+			results query_impl(const char* fmt_str,...) {
+				va_list vargs;
+				va_start(vargs, fmt_str);
+				results res = query(fmt_str, vargs);
+				va_end(vargs);
+				return std::move(res);
+			}
+
+		public:
+			// execute query given by string
+			results query(const std::string& query_str) {
 				std::lock_guard<std::mutex> mg(mutex);
 
 				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
@@ -675,14 +685,10 @@ namespace daotk {
 				return results{ my_conn, mysql_store_result(my_conn) };
 			}
 
-		public:
 			// execute query with printf-style substitutions
-			results query(const std::string& fmt_str,...) {
-				va_list vargs;
-				va_start(vargs, fmt_str);
-				results res = query_impl(fmt_str.c_str(), vargs);
-				va_end(vargs);
-				return std::move(res);
+			template <typename... Values>
+			results query(const std::string& fmt_str, Values... values) {
+				return query_impl(fmt_str.c_str(), std::forward<Values>(values)...);
 			}
 		};
 

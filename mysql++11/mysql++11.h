@@ -648,7 +648,7 @@ namespace daotk {
 			}
 
 		protected:
-			results query_impl(const char* fmt_str, va_list args) {
+			results query_impl2(const char* fmt_str, va_list args) {
 				size_t size = 256;
 				std::vector<char> buf(size);
 
@@ -663,10 +663,10 @@ namespace daotk {
 				}
 			}
 
-			results query_impl(const char* fmt_str,...) {
+			results query_impl1(const char* fmt_str,...) {
 				va_list vargs;
 				va_start(vargs, fmt_str);
-				results res = query_impl(fmt_str, vargs);
+				results res = query_impl2(fmt_str, vargs);
 				va_end(vargs);
 				return std::move(res);
 			}
@@ -688,7 +688,7 @@ namespace daotk {
 			// execute query with printf-style substitutions
 			template <typename... Values>
 			results query(const std::string& fmt_str, Values... values) {
-				return query_impl(fmt_str.c_str(), std::forward<Values>(values)...);
+				return query_impl1(fmt_str.c_str(), std::forward<Values>(values)...);
 			}
 		};
 

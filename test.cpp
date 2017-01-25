@@ -1,5 +1,5 @@
-#include "mysql++11/mysql++11.h"
 #include <iostream>
+#include "mysql++11/mysql++11.h"
 
 
 using namespace std;
@@ -62,7 +62,6 @@ int main()
 
 	// 1) queries can be passed using convenient printf-style
 	// 2) optional type can be used to know whether the returned value is available
-
 	auto avg_weight = my.query("select avg(weight) from person where avatar >= %d or weight <= %f", 2, 70.5)
 						.get_value<optional_type<double>>();
 	if (avg_weight)
@@ -80,7 +79,7 @@ int main()
 	optional_type<double> weight;
 
 	auto res = my.query("select id, name, weight from person where id = %d", 3);
-	if (res) {
+	if (!res.is_empty()) {
 		res.fetch(id, name, weight);
 
 		cout << "ID: " << id << ", name: " << name;
@@ -96,7 +95,6 @@ int main()
 	// a multi-row data query using lambda function with row fields in parameter,
 	// note that optional type can also be used,
 	// datetime is a supoorting type is used for handing date and time
-
 	my.query("select id, name, weight, birthday from person")
 		.each([](int id, string name, optional_type<double> weight, optional_type<datetime> birthday) {
 			cout << "ID: " << id << ", name: " << name;
@@ -114,15 +112,15 @@ int main()
 	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
 
 	// another way to iterate through rows using a container-like object
+	// (unsuccessful/no-result queries will return an empty container)
 	res = my.query("select id, name, weight from person");
-	if (res) {
-		for (auto& row : res.as_container<int, string, optional_type<double>>()) {
-			tie(id, name, weight) = row;
+	for (auto& row : res.as_container<int, string, optional_type<double>>()) {
+		weight.reset();
+		tie(id, name, weight) = row;
 
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
-		}
+		cout << "ID: " << id << ", name: " << name;
+		if (weight) cout << ", weight: " << *weight;
+		cout << endl;
 	}
 
 
@@ -133,6 +131,7 @@ int main()
 	// of course, the-old-good-time-style loop is also possible:
 	res = my.query("select id, name, weight from person");
 	while (!res.eof()) {
+		weight.reset();
 		res.fetch(id, name, weight);
 
 		cout << "ID: " << id << ", name: " << name;

@@ -77,7 +77,7 @@ Example showing how to getting back multiple typed values in a row, optional typ
 	optional_type<double> weight;
 
 	auto res = my.query("select id, name, weight from person where id = %d", 3);
-	if (res) {
+	if (!res.is_empty()) {
 		res.fetch(id, name, weight);
 
 		cout << "ID: " << id << ", name: " << name;
@@ -96,17 +96,23 @@ A multi-row data query using lambda function with row fields in parameter. Note 
 		});
 ```
 
-Another way to iterate through rows using a container-like object:
+Another way to iterate through rows using a container-like object (note that unsuccessful/no-result queries will return an empty container):
 ```cpp
 	res = my.query("select id, name, weight from person");
-	if (res) {
-		for (auto row : res.as_container<int, string, optional_type<double>>()) {
-			tie(id, name, weight) = row;
-			// ...
-		}
+	for (auto row : res.as_container<int, string, optional_type<double>>()) {
+		tie(id, name, weight) = row;
+		// ...
 	}
 ```
-
+or in C++98 style:
+```cpp
+	res = my.query("select id, name, weight from person");
+	auto ctn = res.as_container<int, string, optional_type<double>>();
+	for (auto i = ctn.begin(); i != ctn.end(); i++) {
+		tie(id, name, weight) = *i;
+		// ...
+	}
+```
 
 Of course, the-old-good-time-style loop is also possible:
 ```cpp

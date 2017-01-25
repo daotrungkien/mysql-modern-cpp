@@ -285,13 +285,13 @@ namespace daotk {
 			}
 
 			// return number of rows
-			unsigned long long count() const {
-				return mysql_num_rows(res);
+			unsigned long long count() {
+				return res == nullptr ? 0 : mysql_num_rows(res);
 			}
 
 			// return number of fields
-			unsigned int fields() const {
-				return mysql_num_fields(res);
+			unsigned int fields() {
+				return res == nullptr ? 0 : mysql_num_fields(res);
 			}
 
 			// return true if query was executed successfully
@@ -300,13 +300,13 @@ namespace daotk {
 			}
 
 			// return true if no data was returned
-			bool is_empty() const {
-				return res == nullptr || count() == 0;
+			bool is_empty() {
+				return count() == 0;
 			}
 
 			// return true if passed the last row
 			bool eof() {
-				if (is_empty()) return true;
+				if (res == nullptr) return true;
 				if (!started) reset();
 				return row == nullptr;
 			}
@@ -318,6 +318,7 @@ namespace daotk {
 
 			// go to nth row and fetch data, return true if successful
 			bool seek(unsigned long long n) {
+				if (res == nullptr) return false;
 				mysql_data_seek(res, n);
 				row = mysql_fetch_row(res);
 				started = true;
@@ -338,7 +339,8 @@ namespace daotk {
 			// iterate through all rows, each time execute the callback function
 			template <typename Function>
 			int each(Function callback) {
-				if (res == nullptr) return -1;
+				if (my_conn == nullptr) return -1;
+				if (res == nullptr) return 0;
 
 				reset();
 
@@ -365,7 +367,7 @@ namespace daotk {
 
 			bool get_value(int i, bool& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = (std::stoi(row[i]) != 0);
@@ -378,7 +380,7 @@ namespace daotk {
 
 			bool get_value(int i, int& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stoi(row[i]);
@@ -391,7 +393,7 @@ namespace daotk {
 
 			bool get_value(int i, unsigned int& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stoul(row[i]);
@@ -404,7 +406,7 @@ namespace daotk {
 
 			bool get_value(int i, long& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stol(row[i]);
@@ -417,7 +419,7 @@ namespace daotk {
 
 			bool get_value(int i, unsigned long& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stoul(row[i]);
@@ -430,7 +432,7 @@ namespace daotk {
 
 			bool get_value(int i, long long& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stoll(row[i]);
@@ -443,7 +445,7 @@ namespace daotk {
 
 			bool get_value(int i, unsigned long long& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stoull(row[i]);
@@ -456,7 +458,7 @@ namespace daotk {
 
 			bool get_value(int i, float& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stof(row[i]);
@@ -469,7 +471,7 @@ namespace daotk {
 
 			bool get_value(int i, double& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stod(row[i]);
@@ -482,7 +484,7 @@ namespace daotk {
 
 			bool get_value(int i, long double& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
 					value = std::stold(row[i]);
@@ -495,7 +497,7 @@ namespace daotk {
 
 			bool get_value(int i, std::string& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				value = row[i];
 				return true;
@@ -503,7 +505,7 @@ namespace daotk {
 
 			bool get_value(int i, datetime& value) {
 				if (!started) reset();
-				if (row[i] == nullptr) return false;
+				if (row == nullptr || row[i] == nullptr) return false;
 
 				value.from_sql(row[i]);
 				return true;
@@ -646,39 +648,22 @@ namespace daotk {
 			}
 
 		protected:
-			results query(const std::string& fmt_str, va_list args) {
+			results query_impl(const std::string& fmt_str, va_list args) {
 				size_t size = 256;
-				std::vector<char> dynamicbuf(size);
-				char* buf = &dynamicbuf[0];
-				va_list ap_copy;
+				std::vector<char> buf(size);
 
 				while (true) {
-					// Try to vsnprintf into our buffer.
-					va_copy(ap_copy, args);
-					int needed = std::vsnprintf(buf, size, fmt_str.c_str(), args);
-					va_end(ap_copy);
+					int needed = std::vsnprintf(&buf[0], size, fmt_str.c_str(), args);
 
-					// NB. C99 (which modern Linux and OS X follow) says vsnprintf
-					// failure returns the length it would have needed.  But older
-					// glibc and current Windows return -1 for failure, i.e., not
-					// telling us how much was needed.
-					if (needed <= (int)size && needed >= 0) {
-						// It fit fine so we're done.
-						return query(buf);
-					}
+					if (needed <= (int)size && needed >= 0)
+						return query_impl(&buf[0]);
 
-					// vsnprintf reported that it wanted to write more characters
-					// than we allotted.  So try again using a dynamic buffer.  This
-					// doesn't happen very often if we chose our initial size well.
 					size = (needed > 0) ? (needed + 1) : (size * 2);
-					dynamicbuf.resize(size);
-					buf = &dynamicbuf[0];
+					buf.resize(size);
 				}
 			}
 
-		public:
-			// execute query
-			results query(const std::string& query_str) {
+			results query_impl(const std::string& query_str) {
 				std::lock_guard<std::mutex> mg(mutex);
 
 				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
@@ -690,22 +675,15 @@ namespace daotk {
 				return results{ my_conn, mysql_store_result(my_conn) };
 			}
 
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wvarargs"
-#endif
-			// execute printf-style query
-			template <typename Arg>
-			results query(std::string fmt_str, Arg,...) {
-				va_list args;
-				va_start(args, fmt_str);
-				results res = query(fmt_str, args);
-				va_end(args);
+		public:
+			// execute query with printf-style substitutions
+			results query(const std::string& fmt_str,...) {
+				va_list vargs;
+				va_start(vargs, fmt_str);
+				results res = query_impl(fmt_str.c_str(), vargs);
+				va_end(vargs);
 				return std::move(res);
 			}
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
 		};
 
 

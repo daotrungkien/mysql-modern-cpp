@@ -1,7 +1,7 @@
 /*
 
 Modern C++ wrapper for MySQL with simple and convenient usage
-Version: 0.9.0.0
+Version: 1.0.0.0
 Date: 2017 Jan 22
 
 Author: Dao Trung Kien

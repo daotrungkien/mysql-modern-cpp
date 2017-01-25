@@ -666,7 +666,7 @@ namespace daotk {
 			results query_impl(const char* fmt_str,...) {
 				va_list vargs;
 				va_start(vargs, fmt_str);
-				results res = query(fmt_str, vargs);
+				results res = query_impl(fmt_str, vargs);
 				va_end(vargs);
 				return std::move(res);
 			}

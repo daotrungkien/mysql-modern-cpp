@@ -1,13 +1,13 @@
 # mysql++11
 
 ## Description:
-This is a lightweight wrapper for MySQL with simple and convenient usage in modern C++ (C++14, C++17).
+This is a lightweight wrapper for MySQL with simple and convenient usage in Modern C++ (C++11, C++14, C++17 or later).
 
 ## License:
 Completely free. No restriction!
 
 ## Requirements:
-- C++11 ready compiler - please check if your compiler is up to date (at the moment: MSVC 2015, g++ 5.1, clang 3.8)
+- C++11 ready compiler - please check if your compiler is up to date (at the moment: MSVC 2012, g++ 5.1, clang 3.8)
 - MySQL Connector/C:
 	+ For Windows: https://dev.mysql.com/downloads/connector/c/
 	+ For Linux: `sudo apt-get install libmysqlclient`
@@ -40,7 +40,7 @@ Note that in the following examples, a table defined as follows is used:
 ```
 First, `#include <mysql++11.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
 
-Establishing a connection by constructor, or by connection::open() function:
+Establishing a connection by constructor, or by `connection::open()` function:
 ```cpp
 	connection my("db4free.net", "kien", "kienkien", "kien");
 	if (!my) {

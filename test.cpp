@@ -8,7 +8,7 @@ using namespace daotk::mysql;
 int main()
 {
 	// connection
-	connection my("db4free.net", "kien", "kienkien", "kien");
+	connection my("10.0.0.105", "kien", "kienkien", "kien");
 	if (!my) {
 		cout << "Connection failed" << endl;
 		return -1;

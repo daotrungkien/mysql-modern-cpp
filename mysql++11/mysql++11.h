@@ -9,7 +9,7 @@ http://www.mica.edu.vn/perso/kiendt/
 
 
 Macro Flags:
-	STD_OPTIONAL	: using std::optional in C++17 if defined, or std::experimental::optional otherwise
+STD_OPTIONAL	: using std::optional in C++17 if defined, or std::experimental::optional otherwise
 
 */
 
@@ -733,6 +733,205 @@ namespace daotk {
 			return result_iterator<Values...>{res, res->count()};
 		}
 
+		namespace stmt_bind_detail {
+			struct my_bind_base {
+				MYSQL_BIND* bind;
+				virtual ~my_bind_base() {}
+				// Called before executing the statement
+				virtual void pre_execute() {}
+				// Called after executing the statement
+				virtual void post_execute() {}
+				// Called before fetching results
+				virtual void pre_fetch() {}
+				// If post_fetch returns true, we call mysql_stmt_fetch_column again (for example for strings)
+				virtual bool post_fetch() { return false; }
+				// Only called of post_fetch returned true, after mysql_stmt_fetch_column was called
+				virtual void post_refetch() {}
+			};
+
+			template<typename T>
+			struct my_bind : my_bind_base {
+			};
+
+			template<enum_field_types mysql_type, typename T>
+			struct my_number_bind : my_bind_base {
+				T* data;
+
+				virtual void pre_execute() override { update(); }
+				virtual void pre_fetch() override { update(); }
+
+				void update() {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					bind->buffer = data;
+					bind->buffer_type = mysql_type;
+					bind->is_null_value = false;
+					bind->is_unsigned = std::is_unsigned<T>::value;
+				}
+			};
+
+			template<enum_field_types mysql_type, typename T>
+			struct my_optional_number_bind : my_bind_base {
+				optional_type<T>* data;
+				T pdata;
+
+				virtual void pre_execute() override
+				{
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					if (data->has_value()) {
+						pdata = data->value();
+					}
+					bind->buffer = &pdata;
+					bind->buffer_type = mysql_type;
+					bind->is_null_value = data->has_value();
+					bind->is_unsigned = std::is_unsigned<T>::value;
+				}
+
+				virtual void pre_fetch() override {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					bind->buffer = &pdata;
+					bind->buffer_type = mysql_type;
+					bind->is_unsigned = std::is_unsigned<T>::value;
+					bind->is_null = &bind->is_null_value;
+				}
+
+				virtual bool post_fetch() override {
+					if (bind->is_null_value) {
+						data->reset();
+					}
+					else {
+						*data = pdata;
+					}
+					return false;
+				}
+			};
+
+			template<> struct my_bind<uint8_t> : my_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
+			template<> struct my_bind<int8_t> : my_number_bind<MYSQL_TYPE_TINY, int8_t> {};
+			template<> struct my_bind<uint16_t> : my_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
+			template<> struct my_bind<int16_t> : my_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
+			template<> struct my_bind<uint32_t> : my_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
+			template<> struct my_bind<int32_t> : my_number_bind<MYSQL_TYPE_LONG, int32_t> {};
+			template<> struct my_bind<uint64_t> : my_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
+			template<> struct my_bind<int64_t> : my_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
+			template<> struct my_bind<float> : my_number_bind<MYSQL_TYPE_FLOAT, float> {};
+			template<> struct my_bind<double> : my_number_bind<MYSQL_TYPE_DOUBLE, double> {};
+
+			template<> struct my_bind<bool> : my_number_bind<MYSQL_TYPE_TINY, bool> {};
+
+			template<> struct my_bind<optional_type<uint8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
+			template<> struct my_bind<optional_type<int8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, int8_t> {};
+			template<> struct my_bind<optional_type<uint16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
+			template<> struct my_bind<optional_type<int16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
+			template<> struct my_bind<optional_type<uint32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
+			template<> struct my_bind<optional_type<int32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, int32_t> {};
+			template<> struct my_bind<optional_type<uint64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
+			template<> struct my_bind<optional_type<int64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
+			template<> struct my_bind<optional_type<float>> : my_optional_number_bind<MYSQL_TYPE_FLOAT, float> {};
+			template<> struct my_bind<optional_type<double>> : my_optional_number_bind<MYSQL_TYPE_DOUBLE, double> {};
+
+			template<> struct my_bind<optional_type<bool>> : my_optional_number_bind<MYSQL_TYPE_TINY, bool> {};
+
+			template<>
+			struct my_bind<std::string> : my_bind_base {
+				std::string* data;
+				virtual void pre_execute() override {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					if (data != nullptr) {
+						bind->buffer = (void*)data->data();
+						bind->buffer_length = data->size();
+						bind->buffer_type = MYSQL_TYPE_STRING;
+						bind->is_null_value = false;
+						bind->length_value = data->size();
+					}
+					else {
+						bind->buffer_type = MYSQL_TYPE_NULL;
+					}
+					bind->length = &bind->length_value;
+					bind->is_null = &bind->is_null_value;
+				}
+				virtual void pre_fetch() override {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					bind->buffer_type = MYSQL_TYPE_STRING;
+					// libmysql debug build breaks id buffer_length is 0
+					data->resize(1);
+					bind->buffer = (void*)data->data();
+					bind->buffer_length = data->size();
+					bind->is_null_value = false;
+					bind->length = &bind->length_value;
+					bind->is_null = &bind->is_null_value;
+				}
+				virtual bool post_fetch() override {
+					if (bind->length_value > 0) {
+						data->resize(bind->length_value);
+						bind->buffer = (void*)data->data();
+						bind->buffer_length = data->size();
+						return true;
+					}
+					else {
+						data->clear();
+						return false;
+					}
+				}
+			};
+
+			template<>
+			struct my_bind<optional_type<std::string>> : my_bind_base {
+				optional_type<std::string>* data;
+
+				virtual void pre_execute() override {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					if (data->has_value()) {
+						bind->buffer = (void*)data->value().data();
+						bind->buffer_length = data->value().size();
+						bind->buffer_type = MYSQL_TYPE_STRING;
+						bind->is_null_value = false;
+						bind->length_value = bind->buffer_length;
+					}
+					else {
+						bind->is_null_value = true;
+					}
+					bind->length = &bind->length_value;
+					bind->is_null = &bind->is_null_value;
+				}
+				virtual void pre_fetch() override {
+					memset(bind, 0x00, sizeof(MYSQL_BIND));
+					bind->buffer_type = MYSQL_TYPE_STRING;
+
+					// Init temp
+					*data = std::string();
+
+					// libmysql debug build breaks if buffer_length is 0
+					auto& pdata = data->value();
+					pdata.resize(1);
+					bind->buffer = (void*)pdata.data();
+					bind->buffer_length = pdata.size();
+					bind->is_null_value = false;
+					bind->length = &bind->length_value;
+					bind->is_null = &bind->is_null_value;
+				}
+
+				virtual bool post_fetch() override {
+					if (bind->is_null_value) {
+						data->reset();
+						return false;
+					}
+					else {
+						auto& pdata = data->value();
+						if (bind->length_value > 0) {
+							pdata.resize(bind->length_value);
+							bind->buffer = (void*)pdata.data();
+							bind->buffer_length = pdata.size();
+							return true;
+						}
+						else {
+							pdata.clear();
+							return false;
+						}
+					}
+				}
+			};
+		}
+
 		class prepared_stmt : public std::enable_shared_from_this<prepared_stmt> {
 		private:
 			connection& con;
@@ -740,205 +939,8 @@ namespace daotk {
 
 			class mysql_bind_set {
 			private:
-				struct my_bind_base {
-					MYSQL_BIND* bind;
-					virtual ~my_bind_base() {}
-					// Called before executing the statement
-					virtual void pre_execute() {}
-					// Called after executing the statement
-					virtual void post_execute() {}
-					// Called before fetching results
-					virtual void pre_fetch() {}
-					// If post_fetch returns true, we call mysql_stmt_fetch_column again (for example for strings)
-					virtual bool post_fetch() { return false; }
-					// Only called of post_fetch returned true, after mysql_stmt_fetch_column was called
-					virtual void post_refetch() {}
-				};
-
-				template<typename T>
-				struct my_bind : my_bind_base {
-				};
-
-				template<enum_field_types mysql_type, typename T>
-				struct my_number_bind : my_bind_base {
-					T* data;
-
-					virtual void pre_execute() override { update(); }
-					virtual void pre_fetch() override { update(); }
-
-					void update() {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						bind->buffer = data;
-						bind->buffer_type = mysql_type;
-						bind->is_null_value = false;
-						bind->is_unsigned = std::is_unsigned<T>::value;
-					}
-				};
-
-				template<enum_field_types mysql_type, typename T>
-				struct my_optional_number_bind : my_bind_base {
-					optional_type<T>* data;
-					T pdata;
-
-					virtual void pre_execute() override
-					{
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						if (data->has_value()) {
-							pdata = data->value();
-						}
-						bind->buffer = &pdata;
-						bind->buffer_type = mysql_type;
-						bind->is_null_value = data->has_value();
-						bind->is_unsigned = std::is_unsigned<T>::value;
-					}
-
-					virtual void pre_fetch() override {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						bind->buffer = &pdata;
-						bind->buffer_type = mysql_type;
-						bind->is_unsigned = std::is_unsigned<T>::value;
-						bind->is_null = &bind->is_null_value;
-					}
-
-					virtual bool post_fetch() override {
-						if (bind->is_null_value) {
-							data->reset();
-						}
-						else {
-							*data = pdata;
-						}
-						return false;
-					}
-				};
-
-				template<> struct my_bind<uint8_t> : my_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
-				template<> struct my_bind<int8_t> : my_number_bind<MYSQL_TYPE_TINY, int8_t> {};
-				template<> struct my_bind<uint16_t> : my_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
-				template<> struct my_bind<int16_t> : my_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
-				template<> struct my_bind<uint32_t> : my_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
-				template<> struct my_bind<int32_t> : my_number_bind<MYSQL_TYPE_LONG, int32_t> {};
-				template<> struct my_bind<uint64_t> : my_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
-				template<> struct my_bind<int64_t> : my_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
-				template<> struct my_bind<float> : my_number_bind<MYSQL_TYPE_FLOAT, float> {};
-				template<> struct my_bind<double> : my_number_bind<MYSQL_TYPE_DOUBLE, double> {};
-
-				template<> struct my_bind<bool> : my_number_bind<MYSQL_TYPE_TINY, bool> {};
-
-				template<> struct my_bind<optional_type<uint8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
-				template<> struct my_bind<optional_type<int8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, int8_t> {};
-				template<> struct my_bind<optional_type<uint16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
-				template<> struct my_bind<optional_type<int16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
-				template<> struct my_bind<optional_type<uint32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
-				template<> struct my_bind<optional_type<int32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, int32_t> {};
-				template<> struct my_bind<optional_type<uint64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
-				template<> struct my_bind<optional_type<int64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
-				template<> struct my_bind<optional_type<float>> : my_optional_number_bind<MYSQL_TYPE_FLOAT, float> {};
-				template<> struct my_bind<optional_type<double>> : my_optional_number_bind<MYSQL_TYPE_DOUBLE, double> {};
-
-				template<> struct my_bind<optional_type<bool>> : my_optional_number_bind<MYSQL_TYPE_TINY, bool> {};
-
-				template<>
-				struct my_bind<std::string> : my_bind_base {
-					std::string* data;
-					virtual void pre_execute() override {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						if (data != nullptr) {
-							bind->buffer = (void*)data->data();
-							bind->buffer_length = data->size();
-							bind->buffer_type = MYSQL_TYPE_STRING;
-							bind->is_null_value = false;
-							bind->length_value = data->size();
-						}
-						else {
-							bind->buffer_type = MYSQL_TYPE_NULL;
-						}
-						bind->length = &bind->length_value;
-						bind->is_null = &bind->is_null_value;
-					}
-					virtual void pre_fetch() override {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						bind->buffer_type = MYSQL_TYPE_STRING;
-						// libmysql debug build breaks id buffer_length is 0
-						data->resize(1);
-						bind->buffer = (void*)data->data();
-						bind->buffer_length = data->size();
-						bind->is_null_value = false;
-						bind->length = &bind->length_value;
-						bind->is_null = &bind->is_null_value;
-					}
-					virtual bool post_fetch() override {
-						if (bind->length_value > 0) {
-							data->resize(bind->length_value);
-							bind->buffer = (void*)data->data();
-							bind->buffer_length = data->size();
-							return true;
-						}
-						else {
-							data->clear();
-							return false;
-						}
-					}
-				};
-
-				template<>
-				struct my_bind<optional_type<std::string>> : my_bind_base {
-					optional_type<std::string>* data;
-
-					virtual void pre_execute() override {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						if (data->has_value()) {
-							bind->buffer = (void*)data->value().data();
-							bind->buffer_length = data->value().size();
-							bind->buffer_type = MYSQL_TYPE_STRING;
-							bind->is_null_value = false;
-							bind->length_value = bind->buffer_length;
-						}
-						else {
-							bind->is_null_value = true;
-						}
-						bind->length = &bind->length_value;
-						bind->is_null = &bind->is_null_value;
-					}
-					virtual void pre_fetch() override {
-						memset(bind, 0x00, sizeof(MYSQL_BIND));
-						bind->buffer_type = MYSQL_TYPE_STRING;
-
-						// Init temp
-						*data = std::string();
-
-						// libmysql debug build breaks if buffer_length is 0
-						auto& pdata = data->value();
-						pdata.resize(1);
-						bind->buffer = (void*)pdata.data();
-						bind->buffer_length = pdata.size();
-						bind->is_null_value = false;
-						bind->length = &bind->length_value;
-						bind->is_null = &bind->is_null_value;
-					}
-
-					virtual bool post_fetch() override {
-						if (bind->is_null_value) {
-							data->reset();
-							return false;
-						}
-						else {
-							auto& pdata = data->value();
-							if (bind->length_value > 0) {
-								pdata.resize(bind->length_value);
-								bind->buffer = (void*)pdata.data();
-								bind->buffer_length = pdata.size();
-								return true;
-							}
-							else {
-								pdata.clear();
-								return false;
-							}
-						}
-					}
-				};
-
 				std::vector<MYSQL_BIND> _binds_mysql;
-				std::vector<std::unique_ptr<my_bind_base>> _wrappers;
+				std::vector<std::unique_ptr<stmt_bind_detail::my_bind_base>> _wrappers;
 			public:
 				mysql_bind_set(size_t size)
 				{
@@ -982,7 +984,7 @@ namespace daotk {
 				{
 					if (idx >= _wrappers.size())
 						throw std::out_of_range("Invalid binding index");
-					auto wrap = std::make_unique<my_bind<T>>();
+					auto wrap = std::make_unique<stmt_bind_detail::my_bind<T>>();
 					wrap->data = &arg;
 					wrap->bind = &_binds_mysql[idx];
 					_wrappers[idx] = std::move(wrap);
@@ -1083,6 +1085,14 @@ namespace daotk {
 					return true;
 				}
 				else return false;
+			}
+
+			unsigned int error_code() const {
+				return mysql_stmt_errno(stmt.get());
+			}
+
+			const char* error_message() const {
+				return mysql_stmt_error(stmt.get());
 			}
 		};
 	}

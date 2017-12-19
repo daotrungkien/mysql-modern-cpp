@@ -222,8 +222,8 @@ namespace daotk {
 			friend class connection;
 
 		protected:
-			MYSQL_RES* res;
 			MYSQL* my_conn;
+			MYSQL_RES* res;
 			MYSQL_ROW row = nullptr;
 			bool started = false;
 
@@ -567,19 +567,34 @@ namespace daotk {
 		};
 
 
+		struct connect_options {
+			connect_options()
+				: timeout(0), autoreconnect(false)
+			{}
+
+			std::string server;
+			std::string username;
+			std::string password;
+			std::string dbname;
+			unsigned int timeout;
+			bool autoreconnect;
+			std::string init_command;
+			std::string charset;
+		};
+
 
 		// database connection and query...
 		class connection : public std::enable_shared_from_this<connection> {
 		protected:
 			MYSQL* my_conn;
-			std::mutex mutex;
+			mutable std::mutex mutex;
 
 			// mutex needs to be locked while using a prepared stmt
 			friend class prepared_stmt;
 
 		public:
 			// open a connection (close the old one if already open), return true if successful
-			bool open(std::string server, std::string username, std::string password, std::string dbname = "", unsigned int timeout = 0) {
+			bool open(const connect_options& options) {
 				if (is_open()) close();
 
 				std::lock_guard<std::mutex> mg(mutex);
@@ -587,9 +602,15 @@ namespace daotk {
 				my_conn = mysql_init(nullptr);
 				if (my_conn == nullptr) return false;
 
-				if (timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&timeout);
+				if (options.autoreconnect) { 
+					my_bool b = options.autoreconnect;
+					mysql_options(my_conn, MYSQL_OPT_RECONNECT, &b);
+				}
+				if (!options.charset.empty()) mysql_options(my_conn, MYSQL_SET_CHARSET_NAME, options.charset.c_str());
+				if (!options.init_command.empty()) mysql_options(my_conn, MYSQL_INIT_COMMAND, options.init_command.c_str());
+				if (options.timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&options.timeout);
 
-				if (nullptr == mysql_real_connect(my_conn, server.c_str(), username.c_str(), password.c_str(), dbname.c_str(), 0, NULL, 0)) {
+				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), 0, NULL, 0)) {
 					mysql_close(my_conn);
 					my_conn = nullptr;
 					return false;
@@ -598,9 +619,26 @@ namespace daotk {
 				return true;
 			}
 
+			// open a connection (close the old one if already open), return true if successful
+			bool open(std::string server, std::string username, std::string password, std::string dbname = "", unsigned int timeout = 0) {
+				connect_options options;
+				options.server = server;
+				options.username = username;
+				options.password = password;
+				options.dbname = dbname;
+				options.timeout = timeout;
+				return open(options);
+			}
+
 			connection()
 				: my_conn(nullptr)
 			{ }
+
+			connection(const connect_options& opts)
+				: my_conn(nullptr)
+			{
+				open(opts);
+			}
 
 			connection(std::string server, std::string username, std::string password, std::string dbname = "", unsigned int timeout = 0)
 				: my_conn(nullptr)
@@ -621,13 +659,15 @@ namespace daotk {
 				close();
 			}
 
-			// same as is_open()
 			operator bool() const {
-				return my_conn != nullptr;
+				return is_open();
 			}
 
 			bool is_open() const {
-				return my_conn != nullptr;
+				if(my_conn == nullptr)
+					return false;
+				std::lock_guard<std::mutex> mg(mutex);
+				return mysql_ping(my_conn) == 0;
 			}
 
 			// raw MySQL connection in case needed

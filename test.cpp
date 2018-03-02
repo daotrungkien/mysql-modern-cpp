@@ -8,7 +8,7 @@ using namespace daotk::mysql;
 int main()
 {
 	// connection
-	connection my("db4free.net", "kien", "kienkien", "kien");
+	connection my("10.0.0.105", "kien", "kienkien", "kien");
 	if (!my) {
 		cout << "Connection failed" << endl;
 		return -1;
@@ -139,6 +139,21 @@ int main()
 		cout << endl;
 
 		res.next();
+	}
+
+	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+
+	// we also have support for prepared statements and binding
+	prepared_stmt stmt(my, "select id, name, weight from person where weight > ? or weight is null");
+
+	double pweight = 60;
+	stmt.bindParam(pweight);
+	stmt.bindResult(id, name, weight);
+	stmt.execute();
+	while (stmt.fetch()) {
+		cout << "ID: " << id << ", name: " << name;
+		if (weight) cout << ", weight: " << *weight;
+		cout << endl;
 	}
 
 	return 0;

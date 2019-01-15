@@ -373,7 +373,7 @@ namespace daotk {
 					value = (std::stoi(row[i]) != 0);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -386,7 +386,7 @@ namespace daotk {
 					value = std::stoi(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -396,10 +396,10 @@ namespace daotk {
 				if (row == nullptr || row[i] == nullptr) return false;
 
 				try {
-					value = std::stoul(row[i]);
+					value = (unsigned int)std::stoul(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -412,7 +412,7 @@ namespace daotk {
 					value = std::stol(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -425,7 +425,7 @@ namespace daotk {
 					value = std::stoul(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -438,7 +438,7 @@ namespace daotk {
 					value = std::stoll(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -451,7 +451,7 @@ namespace daotk {
 					value = std::stoull(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -464,7 +464,7 @@ namespace daotk {
 					value = std::stof(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -477,7 +477,7 @@ namespace daotk {
 					value = std::stod(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -490,7 +490,7 @@ namespace daotk {
 					value = std::stold(row[i]);
 					return true;
 				}
-				catch (std::exception) {
+				catch (std::exception&) {
 					return false;
 				}
 			}
@@ -566,10 +566,10 @@ namespace daotk {
 			}
 		};
 
-
 		struct connect_options {
-			connect_options()
-				: timeout(0), autoreconnect(false)
+			connect_options( const std::string &_s = "", const std::string _u = "", const std::string _p = "", const std::string _db = "", 
+					unsigned int _to = 0, bool _ar = false, const std::string _ic = "", const std::string _c = "", int _port = 0)
+				: server(_s), username(_u), password(_p), dbname(_db), timeout(_to), autoreconnect(_ar), init_command(_ic), charset(_c), port(_port)
 			{}
 
 			std::string server;
@@ -580,6 +580,7 @@ namespace daotk {
 			bool autoreconnect;
 			std::string init_command;
 			std::string charset;
+			int port;
 		};
 
 
@@ -610,7 +611,7 @@ namespace daotk {
 				if (!options.init_command.empty()) mysql_options(my_conn, MYSQL_INIT_COMMAND, options.init_command.c_str());
 				if (options.timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&options.timeout);
 
-				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), 0, NULL, 0)) {
+				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), options.port, NULL, 0)) {
 					mysql_close(my_conn);
 					my_conn = nullptr;
 					return false;
@@ -621,13 +622,7 @@ namespace daotk {
 
 			// open a connection (close the old one if already open), return true if successful
 			bool open(std::string server, std::string username, std::string password, std::string dbname = "", unsigned int timeout = 0) {
-				connect_options options;
-				options.server = server;
-				options.username = username;
-				options.password = password;
-				options.dbname = dbname;
-				options.timeout = timeout;
-				return open(options);
+				return open(connect_options(server, username, password, dbname, timeout));
 			}
 
 			connection()
@@ -671,10 +666,10 @@ namespace daotk {
 			}
 
 			// raw MySQL connection in case needed
-			operator MYSQL*() {
+/*			operator MYSQL*() {
 				return my_conn;
 			}
-
+*/
 
 			// wrapping of some functions
 
@@ -1058,7 +1053,7 @@ namespace daotk {
 				:con(pcon), stmt(nullptr, [](MYSQL_STMT* stmt) { mysql_stmt_close(stmt); }), param_binds(0), result_binds(0)
 			{
 				std::unique_lock<std::mutex> lck(con.mutex);
-				stmt.reset(mysql_stmt_init(con));
+				stmt.reset(mysql_stmt_init(con.my_conn));
 
 				if (!stmt) // Out of memory is the only returned error
 					throw std::bad_alloc();
@@ -1118,7 +1113,7 @@ namespace daotk {
 					auto refetch = result_binds.post_fetch();
 					for (auto& i : refetch)
 					{
-						if (mysql_stmt_fetch_column(stmt.get(), &result_binds.binds()[i], i, 0))
+						if (mysql_stmt_fetch_column(stmt.get(), &result_binds.binds()[i], (unsigned int)i, 0))
 							return false;
 					}
 					result_binds.post_refetch(refetch);

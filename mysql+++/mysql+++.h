@@ -4,7 +4,7 @@ Modern C++ wrapper for MySQL with simple and convenient usage
 
 History:
 	VERSION     DATE			CHANGES
-	1.1.0.0		2019 Mar 01		Support for C++17 by default
+	1.1.0.0		2019 Mar 01		Prepared statements, error support in `results'
 	1.0.0.0		2017 Jan 22		First publication
 
 Author:
@@ -1121,7 +1121,7 @@ namespace daotk {
 					throw std::bad_alloc();
 
 				if (mysql_stmt_prepare(stmt.get(), query.c_str(), query.size()))
-					throw std::runtime_error(std::string("Failed to prepare stmt:") + mysql_stmt_error(stmt.get()));
+					throw std::runtime_error(std::string("Failed to prepare stmt: ") + mysql_stmt_error(stmt.get()));
 
 				auto param_count = mysql_stmt_param_count(stmt.get());
 				param_binds = mysql_bind_set(param_count);

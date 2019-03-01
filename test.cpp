@@ -1,5 +1,8 @@
 #include <iostream>
-#include "mysql++11/mysql++11.h"
+
+// uncomment the following line if needed:
+#define NO_STD_OPTIONAL
+#include "mysql+++/mysql+++.h"
 
 
 using namespace std;
@@ -8,7 +11,7 @@ using namespace daotk::mysql;
 int main()
 {
 	// connection
-	connection my("10.0.0.105", "kien", "kienkien", "kien");
+	connection my{ "localhost", "tester", "tester", "test_test_test" };
 	if (!my) {
 		cout << "Connection failed" << endl;
 		return -1;
@@ -16,13 +19,18 @@ int main()
 
 	/* This testing program uses a table defined as follows:
 
-		create table(
-			id unsigned int auto_increment primary key,
+		create table person(
+			id int unsigned auto_increment primary key,
 			name varchar(50),
 			weight double,
 			birthday date,
-			avatar int);
+			avatar int
 		);
+
+		insert into person(name, weight, birthday, avatar) values
+			("Nguyen Van X", 62.54, "1981-07-18", 4),
+			("Tran Thi Y", 56.78, "1999-05-12", 3),
+			("Bui Xuan Z", NULL, NULL, 5);
 
 		+----+--------------+--------+------------+--------+
 		| id | name         | weight | birthday   | avatar |
@@ -38,18 +46,6 @@ int main()
 	int sample_count = 1;
 	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
 
-	// example of simple query, without getting any value back
-	// (the returned object when not assigned is automatically destroyed)
-
-	if (my.query("update person set avatar = floor(rand()*10)"))
-		cout << "Successful" << endl;
-	else cout << "Failed" << endl;
-
-
-
-
-	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
-
 	// simple query and simple way to get back a single value
 	auto row_count = my.query("select count(*) from person")
 						.get_value<int>();
@@ -60,10 +56,23 @@ int main()
 
 	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
 
+	// simple query without getting any value back (note that query() also
+	// works here but is less performant, as the returned `results' object
+	// when not stored is automatically destroyed)
+
+	if (my.exec("update person set avatar = floor(rand()*10)"))
+		cout << "Successful" << endl;
+	else cout << "Failed" << endl;
+
+
+
+
+	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+
 	// 1) queries can be passed using convenient printf-style
 	// 2) optional type can be used to know whether the returned value is available
 	auto avg_weight = my.query("select avg(weight) from person where avatar >= %d or weight <= %f", 2, 70.5)
-						.get_value<optional_type<double>>();
+						.get_value<optional<double>>();
 	if (avg_weight)
 		cout << "Mean weight: " << *avg_weight << endl;
 	else cout << "No max weight value" << endl;
@@ -76,7 +85,7 @@ int main()
 	// example showing how to getting back multiple typed values in a row
 	int id;
 	string name;
-	optional_type<double> weight;
+	optional<double> weight;
 
 	auto res = my.query("select id, name, weight from person where id = %d", 3);
 	if (!res.is_empty()) {
@@ -96,7 +105,7 @@ int main()
 	// note that optional type can also be used,
 	// datetime is a supoorting type is used for handing date and time
 	my.query("select id, name, weight, birthday from person")
-		.each([](int id, string name, optional_type<double> weight, optional_type<datetime> birthday) {
+		.each([](int id, string name, optional<double> weight, optional<datetime> birthday) {
 			cout << "ID: " << id << ", name: " << name;
 			if (weight) cout << ", weight: " << *weight;
 			if (birthday) cout << ", birthday: " << birthday->to_sql();
@@ -114,7 +123,7 @@ int main()
 	// another way to iterate through rows using a container-like object
 	// (unsuccessful/no-result queries will return an empty container)
 	res = my.query("select id, name, weight from person");
-	for (auto& row : res.as_container<int, string, optional_type<double>>()) {
+	for (auto& row : res.as_container<int, string, optional<double>>()) {
 		weight.reset();
 		tie(id, name, weight) = row;
 
@@ -141,20 +150,24 @@ int main()
 		res.next();
 	}
 
+
+
+	
 	cout << "** QUERY EXAMPLE " << sample_count++ << endl;
 
 	// we also have support for prepared statements and binding
 	prepared_stmt stmt(my, "select id, name, weight from person where weight > ? or weight is null");
 
 	double pweight = 60;
-	stmt.bindParam(pweight);
-	stmt.bindResult(id, name, weight);
+	stmt.bind_param(pweight);
+	stmt.bind_result(id, name, weight);
 	stmt.execute();
 	while (stmt.fetch()) {
 		cout << "ID: " << id << ", name: " << name;
 		if (weight) cout << ", weight: " << *weight;
 		cout << endl;
 	}
+
 
 	return 0;
 }

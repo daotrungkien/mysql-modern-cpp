@@ -1,15 +1,22 @@
 /*
 
 Modern C++ wrapper for MySQL with simple and convenient usage
-Version: 1.0.0.0
-Date: 2017 Jan 22
 
-Author: Dao Trung Kien
-http://www.mica.edu.vn/perso/kiendt/
+History:
+	VERSION     DATE			CHANGES
+	1.1.0.0		2019 Mar 01		Support for C++17 by default
+	1.0.0.0		2017 Jan 22		First publication
+
+Author:
+	Dao Trung Kien			https://github.com/daotrungkien
+
+Contributors:
+	Dominik Thalhammer		https://github.com/Thalhammer
+	Samuel Borgman			https://github.com/sambrg
 
 
 Macro Flags:
-STD_OPTIONAL	: using std::optional in C++17 if defined, or std::experimental::optional otherwise
+	NO_STD_OPTIONAL	: using std::experimental::optional by polyfill instead of std::optional in C++17
 
 */
 
@@ -37,7 +44,7 @@ STD_OPTIONAL	: using std::optional in C++17 if defined, or std::experimental::op
 #include "polyfill/datetime.h"
 
 
-#ifdef STD_OPTIONAL
+#ifndef NO_STD_OPTIONAL
 #include <optional>
 #else
 #include "polyfill/optional.hpp"
@@ -52,13 +59,39 @@ namespace daotk {
 		template <typename Function>
 		using function_traits = typename sqlite::utility::function_traits<Function>;
 
-#ifdef STD_OPTIONAL
+#ifndef NO_STD_OPTIONAL
 		template <typename T>
-		using optional_type = typename std::optional<T>;
+		using optional = typename std::optional<T>;
 #else
 		template <typename T>
-		using optional_type = typename std::experimental::optional<T>;
+		using optional = typename std::experimental::optional<T>;
 #endif
+
+
+		std::string format_string_vargs(const char* fmt_str, va_list args) {
+			std::size_t size = 256;
+			std::vector<char> buf(size);
+
+			while (true) {
+				int needed = std::vsnprintf(&buf[0], size, fmt_str, args);
+
+				if (needed <= (int)size && needed >= 0)
+					return &buf[0];
+
+				size = (needed > 0) ? (needed + 1) : (size * 2);
+				buf.resize(size);
+			}
+		}
+
+		std::string format_string(const char* fmt_str, ...) {
+			va_list vargs;
+			va_start(vargs, fmt_str);
+			std::string res = format_string_vargs(fmt_str, vargs);
+			va_end(vargs);
+			return std::move(res);
+		}
+
+
 
 		class results;
 		class connection;
@@ -224,11 +257,17 @@ namespace daotk {
 		protected:
 			MYSQL* my_conn;
 			MYSQL_RES* res;
+			unsigned int error_no;
+			std::string error_msg;
 			MYSQL_ROW row = nullptr;
 			bool started = false;
 
 			results(MYSQL* _my_conn, MYSQL_RES* _res)
-				: my_conn(_my_conn), res(_res)
+				: my_conn(_my_conn), res(_res), error_no(0)
+			{ }
+
+			results(unsigned int _error_no, const char* _error_msg)
+				: error_no(_error_no), error_msg(_error_msg)
 			{ }
 
 
@@ -251,19 +290,20 @@ namespace daotk {
 			}
 
 		public:
+			results() = delete;
 			results(const results& r) = delete;
 			void operator =(const results& r) = delete;
-
-			results()
-				: my_conn(nullptr), res(nullptr)
-			{ }
 
 			results(results&& r) {
 				my_conn = r.my_conn;
 				res = r.res;
+				error_no = r.error_no;
+				error_msg = r.error_msg;
 
 				r.my_conn = nullptr;
 				r.res = nullptr;
+				r.error_no = 0;
+				r.error_msg.clear();
 			}
 
 			void operator = (results&& r) {
@@ -271,11 +311,15 @@ namespace daotk {
 
 				my_conn = r.my_conn;
 				res = r.res;
+				error_no = r.error_no;
+				error_msg = r.error_msg;
 				row = r.row;
 				started = r.started;
 
 				r.my_conn = nullptr;
 				r.res = nullptr;
+				r.error_no = 0;
+				r.error_msg.clear();
 				r.row = nullptr;
 				r.started = false;
 			}
@@ -297,6 +341,16 @@ namespace daotk {
 			// return true if query was executed successfully
 			operator bool() const {
 				return my_conn != nullptr;
+			}
+
+			// return error code
+			unsigned int error_code() const {
+				return error_no;
+			}
+
+			// return error message
+			const std::string& error_message() const {
+				return error_msg;
 			}
 
 			// return true if no data was returned
@@ -524,13 +578,13 @@ namespace daotk {
 			}
 
 			template <typename Value>
-			void get_value(int i, optional_type<Value>& value) {
+			void get_value(int i, optional<Value>& value) {
 				Value v;
 				if (get_value(i, v)) value = v;
 			}
 
 			template <typename Value>
-			void get_value(optional_type<Value>& value) {
+			void get_value(optional<Value>& value) {
 				get_value(0, value);
 			}
 
@@ -567,9 +621,25 @@ namespace daotk {
 		};
 
 		struct connect_options {
-			connect_options( const std::string &_s = "", const std::string _u = "", const std::string _p = "", const std::string _db = "", 
-					unsigned int _to = 0, bool _ar = false, const std::string _ic = "", const std::string _c = "", int _port = 0)
-				: server(_s), username(_u), password(_p), dbname(_db), timeout(_to), autoreconnect(_ar), init_command(_ic), charset(_c), port(_port)
+			connect_options(
+				const std::string &_s = "",
+				const std::string _u = "",
+				const std::string _p = "",
+				const std::string _db = "", 
+				unsigned int _to = 0,
+				bool _ar = false,
+				const std::string _ic = "",
+				const std::string _c = "",
+				int _port = 0
+			) :	server(_s),
+				username(_u),
+				password(_p),
+				dbname(_db),
+				timeout(_to),
+				autoreconnect(_ar),
+				init_command(_ic),
+				charset(_c),
+				port(_port)
 			{}
 
 			std::string server;
@@ -588,9 +658,7 @@ namespace daotk {
 		class connection : public std::enable_shared_from_this<connection> {
 		protected:
 			MYSQL* my_conn;
-			mutable std::mutex mutex;
-
-			// mutex needs to be locked while using a prepared stmt
+			mutable std::mutex mutex;	// mutex needs to be locked while using a prepared stmt
 			friend class prepared_stmt;
 
 		public:
@@ -659,17 +727,16 @@ namespace daotk {
 			}
 
 			bool is_open() const {
-				if(my_conn == nullptr)
-					return false;
+				if(my_conn == nullptr) return false;
 				std::lock_guard<std::mutex> mg(mutex);
 				return mysql_ping(my_conn) == 0;
 			}
 
 			// raw MySQL connection in case needed
-/*			operator MYSQL*() {
+			MYSQL* get_raw_connection() const {
 				return my_conn;
 			}
-*/
+
 
 			// wrapping of some functions
 
@@ -685,48 +752,39 @@ namespace daotk {
 				return mysql_error(my_conn);
 			}
 
-		protected:
-			results query_impl2(const char* fmt_str, va_list args) {
-				size_t size = 256;
-				std::vector<char> buf(size);
-
-				while (true) {
-					int needed = std::vsnprintf(&buf[0], size, fmt_str, args);
-
-					if (needed <= (int)size && needed >= 0)
-						return query(&buf[0]);
-
-					size = (needed > 0) ? (needed + 1) : (size * 2);
-					buf.resize(size);
-				}
-			}
-
-			results query_impl1(const char* fmt_str, ...) {
-				va_list vargs;
-				va_start(vargs, fmt_str);
-				results res = query_impl2(fmt_str, vargs);
-				va_end(vargs);
-				return std::move(res);
-			}
-
 		public:
-			// execute query given by string
+			// execute query given by string and return results
 			results query(const std::string& query_str) {
 				std::lock_guard<std::mutex> mg(mutex);
 
 				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
-				if (ret != 0) return results{};
-
-				ret = mysql_errno(my_conn);
-				if (ret == CR_SERVER_GONE_ERROR || ret == CR_SERVER_LOST) return results{};
+				if (ret != 0) {
+					unsigned int error_no = mysql_errno(my_conn);
+					const char* error_msg = mysql_error(my_conn);
+					return results{ error_no, error_msg };
+				}
 
 				return results{ my_conn, mysql_store_result(my_conn) };
 			}
 
-			// execute query with printf-style substitutions
+			// execute query with printf-style substitutions and return results
 			template <typename... Values>
 			results query(const std::string& fmt_str, Values... values) {
-				return query_impl1(fmt_str.c_str(), std::forward<Values>(values)...);
+				return query( format_string(fmt_str.c_str(), std::forward<Values>(values)...) );
+			}
+
+			// like query(), but no results returned
+			bool exec(const std::string& query_str) {
+				std::lock_guard<std::mutex> mg(mutex);
+
+				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
+				return ret == 0;
+			}
+
+			// like query(), but no results returned
+			template <typename... Values>
+			bool exec(const std::string& fmt_str, Values... values) {
+				return exec(format_string(fmt_str.c_str(), std::forward<Values>(values)...) );
 			}
 		};
 
@@ -806,11 +864,10 @@ namespace daotk {
 
 			template<enum_field_types mysql_type, typename T>
 			struct my_optional_number_bind : my_bind_base {
-				optional_type<T>* data;
+				optional<T>* data;
 				T pdata;
 
-				virtual void pre_execute() override
-				{
+				virtual void pre_execute() override {
 					memset(bind, 0x00, sizeof(MYSQL_BIND));
 					if (data->has_value()) {
 						pdata = data->value();
@@ -853,18 +910,18 @@ namespace daotk {
 
 			template<> struct my_bind<bool> : my_number_bind<MYSQL_TYPE_TINY, bool> {};
 
-			template<> struct my_bind<optional_type<uint8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
-			template<> struct my_bind<optional_type<int8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, int8_t> {};
-			template<> struct my_bind<optional_type<uint16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
-			template<> struct my_bind<optional_type<int16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
-			template<> struct my_bind<optional_type<uint32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
-			template<> struct my_bind<optional_type<int32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, int32_t> {};
-			template<> struct my_bind<optional_type<uint64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
-			template<> struct my_bind<optional_type<int64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
-			template<> struct my_bind<optional_type<float>> : my_optional_number_bind<MYSQL_TYPE_FLOAT, float> {};
-			template<> struct my_bind<optional_type<double>> : my_optional_number_bind<MYSQL_TYPE_DOUBLE, double> {};
+			template<> struct my_bind<optional<uint8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, uint8_t> {};
+			template<> struct my_bind<optional<int8_t>> : my_optional_number_bind<MYSQL_TYPE_TINY, int8_t> {};
+			template<> struct my_bind<optional<uint16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, uint16_t> {};
+			template<> struct my_bind<optional<int16_t>> : my_optional_number_bind<MYSQL_TYPE_SHORT, int16_t> {};
+			template<> struct my_bind<optional<uint32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, uint32_t> {};
+			template<> struct my_bind<optional<int32_t>> : my_optional_number_bind<MYSQL_TYPE_LONG, int32_t> {};
+			template<> struct my_bind<optional<uint64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, uint64_t> {};
+			template<> struct my_bind<optional<int64_t>> : my_optional_number_bind<MYSQL_TYPE_LONGLONG, int64_t> {};
+			template<> struct my_bind<optional<float>> : my_optional_number_bind<MYSQL_TYPE_FLOAT, float> {};
+			template<> struct my_bind<optional<double>> : my_optional_number_bind<MYSQL_TYPE_DOUBLE, double> {};
 
-			template<> struct my_bind<optional_type<bool>> : my_optional_number_bind<MYSQL_TYPE_TINY, bool> {};
+			template<> struct my_bind<optional<bool>> : my_optional_number_bind<MYSQL_TYPE_TINY, bool> {};
 
 			template<>
 			struct my_bind<std::string> : my_bind_base {
@@ -910,8 +967,8 @@ namespace daotk {
 			};
 
 			template<>
-			struct my_bind<optional_type<std::string>> : my_bind_base {
-				optional_type<std::string>* data;
+			struct my_bind<optional<std::string>> : my_bind_base {
+				optional<std::string>* data;
 
 				virtual void pre_execute() override {
 					memset(bind, 0x00, sizeof(MYSQL_BIND));
@@ -976,47 +1033,54 @@ namespace daotk {
 			private:
 				std::vector<MYSQL_BIND> _binds_mysql;
 				std::vector<std::unique_ptr<stmt_bind_detail::my_bind_base>> _wrappers;
+
 			public:
-				mysql_bind_set(size_t size)
-				{
+				mysql_bind_set(std::size_t size) {
 					_binds_mysql.resize(size);
 					_wrappers.resize(size);
 				}
 
-				MYSQL_BIND* binds() { return (MYSQL_BIND*)_binds_mysql.data(); }
-				size_t size() { return _wrappers.size(); }
+				MYSQL_BIND* binds() {
+					return (MYSQL_BIND*)_binds_mysql.data();
+				}
+
+				std::size_t size() {
+					return _wrappers.size();
+				}
 
 
 				void pre_execute() {
 					for (auto& e : _wrappers)
 						e->pre_execute();
 				}
+
 				void post_execute() {
 					for (auto& e : _wrappers)
 						e->post_execute();
 				}
+
 				void pre_fetch() {
 					for (auto& e : _wrappers)
 						e->pre_fetch();
 				}
-				std::vector<size_t> post_fetch() {
-					std::vector<size_t> res;
-					for (size_t i = 0; i < _wrappers.size(); i++)
-					{
+
+				std::vector<std::size_t> post_fetch() {
+					std::vector<std::size_t> res;
+					for (std::size_t i = 0; i < _wrappers.size(); i++) {
 						if (_wrappers[i]->post_fetch())
 							res.push_back(i);
 					}
 					return res;
 				}
-				void post_refetch(const std::vector<size_t>& items) {
+
+				void post_refetch(const std::vector<std::size_t>& items) {
 					for (auto& e : items)
 						_wrappers[e]->post_refetch();
 				}
 
 
 				template<typename T>
-				void set_variable(size_t idx, T& arg)
-				{
+				void set_variable(std::size_t idx, T& arg) {
 					if (idx >= _wrappers.size())
 						throw std::out_of_range("Invalid binding index");
 					auto wrap = std::make_unique<stmt_bind_detail::my_bind<T>>();
@@ -1026,21 +1090,18 @@ namespace daotk {
 				}
 
 				template<typename... Args>
-				void bind_variables(const Args &... args)
-				{
+				void bind_variables(const Args &... args) {
 					bind_variables_impl(0, args...);
 				}
 
 			private:
 				template<typename T>
-				void bind_variables_impl(size_t idx, const T& arg)
-				{
+				void bind_variables_impl(std::size_t idx, const T& arg) {
 					this->set_variable(idx, const_cast<T&>(arg));
 				}
 
 				template<typename T1, typename... Args>
-				void bind_variables_impl(size_t idx, const T1& arg1, const Args &... args)
-				{
+				void bind_variables_impl(std::size_t idx, const T1& arg1, const Args &... args) {
 					bind_variables_impl(idx, arg1);
 					bind_variables_impl(idx + 1, args...);
 				}
@@ -1048,9 +1109,10 @@ namespace daotk {
 
 			mysql_bind_set param_binds;
 			mysql_bind_set result_binds;
+
 		public:
 			prepared_stmt(connection& pcon, const std::string& query)
-				:con(pcon), stmt(nullptr, [](MYSQL_STMT* stmt) { mysql_stmt_close(stmt); }), param_binds(0), result_binds(0)
+				: con(pcon), stmt(nullptr, [](MYSQL_STMT* stmt) { mysql_stmt_close(stmt); }), param_binds(0), result_binds(0)
 			{
 				std::unique_lock<std::mutex> lck(con.mutex);
 				stmt.reset(mysql_stmt_init(con.my_conn));
@@ -1072,14 +1134,18 @@ namespace daotk {
 				}
 			}
 
-			virtual ~prepared_stmt()
-			{
+			// query with printf-style substitutions
+			template <typename... Values>
+			prepared_stmt(connection& pcon, const std::string& fmt_str, Values... values)
+				: prepared_stmt(pcon, format_string(fmt_str.c_str(), std::forward<Values>(values)...))
+			{}
+
+			virtual ~prepared_stmt() {
 				std::unique_lock<std::mutex> lck(con.mutex);
 				stmt.reset();
 			}
 
-			bool execute()
-			{
+			bool execute() {
 				std::unique_lock<std::mutex> lck(con.mutex);
 				param_binds.pre_execute();
 				if (mysql_stmt_bind_param(stmt.get(), param_binds.binds()))
@@ -1091,19 +1157,16 @@ namespace daotk {
 			}
 
 			template<typename... Args>
-			void bindParam(const Args &... args)
-			{
+			void bind_param(const Args &... args) {
 				param_binds.bind_variables(args...);
 			}
 
 			template<typename... Args>
-			void bindResult(Args &... args)
-			{
+			void bind_result(Args &... args) {
 				result_binds.bind_variables(args...);
 			}
 
-			bool fetch()
-			{
+			bool fetch() {
 				std::unique_lock<std::mutex> lck(con.mutex);
 				result_binds.pre_fetch();
 				if (mysql_stmt_bind_result(stmt.get(), result_binds.binds()))
@@ -1111,8 +1174,7 @@ namespace daotk {
 				int rc = mysql_stmt_fetch(stmt.get());
 				if (rc == MYSQL_DATA_TRUNCATED || rc == 0) {
 					auto refetch = result_binds.post_fetch();
-					for (auto& i : refetch)
-					{
+					for (auto& i : refetch) {
 						if (mysql_stmt_fetch_column(stmt.get(), &result_binds.binds()[i], (unsigned int)i, 0))
 							return false;
 					}

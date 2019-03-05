@@ -4,6 +4,7 @@ Modern C++ wrapper for MySQL with simple and convenient usage
 
 History:
 	VERSION     DATE			CHANGES
+	1.2.0.0		2019 Mar 05		Multiple-statement queries, `results' now fetches all in constructor
 	1.1.0.0		2019 Mar 01		Prepared statements, error support in `results'
 	1.0.0.0		2017 Jan 22		First publication
 
@@ -103,7 +104,7 @@ namespace daotk {
 		protected:
 			results* res;
 			std::shared_ptr<std::tuple<Values...>> data;
-			unsigned long long row_index;
+			std::size_t row_index;
 
 
 			template <int I>
@@ -116,7 +117,7 @@ namespace daotk {
 
 			void fetch();
 
-			void set_index(unsigned long long i) {
+			void set_index(std::size_t i) {
 				row_index = i;
 				data.reset();
 			}
@@ -127,7 +128,7 @@ namespace daotk {
 				row_index = 0;
 			}
 
-			result_iterator(results* _res, unsigned long long _row_index)
+			result_iterator(results* _res, std::size_t _row_index)
 				: res(_res), row_index(_row_index)
 			{ }
 
@@ -255,20 +256,20 @@ namespace daotk {
 			friend class connection;
 
 		protected:
-			MYSQL* my_conn;
-			MYSQL_RES* res;
-			unsigned int error_no;
-			std::string error_msg;
-			MYSQL_ROW row = nullptr;
-			bool started = false;
+			std::vector<MYSQL_ROW> rows;
+			std::vector<MYSQL_ROW>::iterator current_row_itr;
+			unsigned int num_fields;
 
-			results(MYSQL* _my_conn, MYSQL_RES* _res)
-				: my_conn(_my_conn), res(_res), error_no(0)
-			{ }
+			results(MYSQL* _my_conn, MYSQL_RES* _res) {
+				num_fields = mysql_num_fields(_res);
 
-			results(unsigned int _error_no, const char* _error_msg)
-				: error_no(_error_no), error_msg(_error_msg)
-			{ }
+				while (MYSQL_ROW row = mysql_fetch_row(_res)) {
+					rows.push_back(row);
+				}
+				mysql_free_result(_res);
+
+				current_row_itr = rows.begin();
+			}
 
 
 			template <typename Function, std::size_t Index>
@@ -290,116 +291,74 @@ namespace daotk {
 			}
 
 		public:
-			results() = delete;
 			results(const results& r) = delete;
 			void operator =(const results& r) = delete;
 
-			results(results&& r) {
-				my_conn = r.my_conn;
-				res = r.res;
-				error_no = r.error_no;
-				error_msg = r.error_msg;
+			results() {
+			}
 
-				r.my_conn = nullptr;
-				r.res = nullptr;
-				r.error_no = 0;
-				r.error_msg.clear();
+			results(results&& r) {
+				rows = std::move(r.rows);
+				current_row_itr = r.current_row_itr;
 			}
 
 			void operator = (results&& r) {
-				if (res != nullptr) mysql_free_result(res);
-
-				my_conn = r.my_conn;
-				res = r.res;
-				error_no = r.error_no;
-				error_msg = r.error_msg;
-				row = r.row;
-				started = r.started;
-
-				r.my_conn = nullptr;
-				r.res = nullptr;
-				r.error_no = 0;
-				r.error_msg.clear();
-				r.row = nullptr;
-				r.started = false;
-			}
-
-			virtual ~results() {
-				if (res != nullptr) mysql_free_result(res);
+				rows = std::move(r.rows);
+				current_row_itr = r.current_row_itr;
 			}
 
 			// return number of rows
-			unsigned long long count() {
-				return res == nullptr ? 0 : mysql_num_rows(res);
+			std::size_t count() const {
+				return rows.size();
 			}
 
 			// return number of fields
-			unsigned int fields() {
-				return res == nullptr ? 0 : mysql_num_fields(res);
-			}
-
-			// return true if query was executed successfully
-			operator bool() const {
-				return my_conn != nullptr;
-			}
-
-			// return error code
-			unsigned int error_code() const {
-				return error_no;
-			}
-
-			// return error message
-			const std::string& error_message() const {
-				return error_msg;
+			unsigned int fields() const {
+				return num_fields;
 			}
 
 			// return true if no data was returned
-			bool is_empty() {
-				return count() == 0;
+			bool is_empty() const {
+				return rows.size() == 0;
 			}
 
 			// return true if passed the last row
-			bool eof() {
-				if (res == nullptr) return true;
-				if (!started) reset();
-				return row == nullptr;
+			bool eof() const {
+				return current_row_itr == rows.end();
 			}
 
-			// go to first row and fetch data
-			bool reset() {
-				return seek(0);
+			// go to first row
+			void reset() {
+				current_row_itr = rows.begin();
 			}
 
-			// go to nth row and fetch data, return true if successful
-			bool seek(unsigned long long n) {
-				if (res == nullptr) return false;
-				mysql_data_seek(res, n);
-				row = mysql_fetch_row(res);
-				started = true;
-				return row != nullptr;
+			// go to nth row
+			void seek(std::size_t n) {
+				current_row_itr = rows.begin() + n;
 			}
 
-			// go to next row and fetch data
-			bool next() {
-				row = mysql_fetch_row(res);
-				return row != nullptr;
+			// go to next row
+			void next() {
+				current_row_itr++;
+			}
+
+			// go to previous row
+			void prev() {
+				current_row_itr--;
 			}
 
 			// return curent row index
-			unsigned long long tell() const {
-				return (unsigned long long)mysql_row_tell(res);
+			std::size_t tell() const {
+				return current_row_itr - rows.begin();
 			}
 
 			// iterate through all rows, each time execute the callback function
 			template <typename Function>
 			int each(Function callback) {
-				if (my_conn == nullptr) return -1;
-				if (res == nullptr) return 0;
-
 				reset();
 
 				int count = 0;
-				while (row != nullptr) {
+				while (!eof()) {
 					count++;
 					if (!bind_and_call(callback)) break;
 					next();
@@ -420,11 +379,10 @@ namespace daotk {
 			// get-value functions in different ways and types...
 
 			bool get_value(int i, bool& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = (std::stoi(row[i]) != 0);
+					value = (std::stoi((*current_row_itr)[i]) != 0);
 					return true;
 				}
 				catch (std::exception&) {
@@ -433,11 +391,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, int& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stoi(row[i]);
+					value = std::stoi((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -446,11 +403,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, unsigned int& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = (unsigned int)std::stoul(row[i]);
+					value = (unsigned int)std::stoul((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -459,11 +415,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, long& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stol(row[i]);
+					value = std::stol((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -472,11 +427,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, unsigned long& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stoul(row[i]);
+					value = std::stoul((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -485,11 +439,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, long long& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stoll(row[i]);
+					value = std::stoll((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -498,11 +451,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, unsigned long long& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stoull(row[i]);
+					value = std::stoull((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -511,11 +463,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, float& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stof(row[i]);
+					value = std::stof((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -524,11 +475,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, double& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stod(row[i]);
+					value = std::stod((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -537,11 +487,10 @@ namespace daotk {
 			}
 
 			bool get_value(int i, long double& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
 				try {
-					value = std::stold(row[i]);
+					value = std::stold((*current_row_itr)[i]);
 					return true;
 				}
 				catch (std::exception&) {
@@ -550,18 +499,16 @@ namespace daotk {
 			}
 
 			bool get_value(int i, std::string& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
-				value = row[i];
+				value = (*current_row_itr)[i];
 				return true;
 			}
 
 			bool get_value(int i, datetime& value) {
-				if (!started) reset();
-				if (row == nullptr || row[i] == nullptr) return false;
+				if (current_row_itr == rows.end() || (*current_row_itr)[i] == nullptr) return false;
 
-				value.from_sql(row[i]);
+				value.from_sql((*current_row_itr)[i]);
 				return true;
 			}
 
@@ -612,34 +559,58 @@ namespace daotk {
 			// get data from every fields of the current row
 			template <typename... Values>
 			bool fetch(Values&... values) {
-				if (!started) reset();
-				if (row == nullptr) return false;
+				if (current_row_itr == rows.end()) return false;
 
 				fetch_impl(0, std::forward<Values&>(values)...);
 				return true;
 			}
 		};
 
+		class exception : public std::exception {
+		protected:
+			unsigned int err_number;
+			std::string err_msg;
+
+		public:
+			exception(unsigned int _err_no, const char* _err_msg)
+				: err_number(_err_no), err_msg(_err_msg)
+			{}
+
+			virtual const char* what() const {
+				return err_msg.c_str();
+			}
+
+			unsigned int error_number() const {
+				return err_number;
+			}
+
+			const std::string& error_message() const {
+				return err_msg;
+			}
+		};
+
 		struct connect_options {
 			connect_options(
-				const std::string &_s = "",
-				const std::string _u = "",
-				const std::string _p = "",
-				const std::string _db = "", 
-				unsigned int _to = 0,
-				bool _ar = false,
-				const std::string _ic = "",
-				const std::string _c = "",
-				int _port = 0
-			) :	server(_s),
-				username(_u),
-				password(_p),
-				dbname(_db),
-				timeout(_to),
-				autoreconnect(_ar),
-				init_command(_ic),
-				charset(_c),
-				port(_port)
+				const std::string &_server = "",
+				const std::string _username = "",
+				const std::string _password = "",
+				const std::string _dbname = "", 
+				unsigned int _timeout = 0,
+				bool _autoreconnect = false,
+				const std::string _init_command = "",
+				const std::string _charset = "",
+				unsigned int _port = 0,
+				unsigned long _client_flag = 0
+			) :	server(_server),
+				username(_username),
+				password(_password),
+				dbname(_dbname),
+				timeout(_timeout),
+				autoreconnect(_autoreconnect),
+				init_command(_init_command),
+				charset(_charset),
+				port(_port),
+				client_flag(_client_flag)
 			{}
 
 			std::string server;
@@ -650,7 +621,8 @@ namespace daotk {
 			bool autoreconnect;
 			std::string init_command;
 			std::string charset;
-			int port;
+			unsigned int port;
+			unsigned long client_flag;
 		};
 
 
@@ -679,7 +651,7 @@ namespace daotk {
 				if (!options.init_command.empty()) mysql_options(my_conn, MYSQL_INIT_COMMAND, options.init_command.c_str());
 				if (options.timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&options.timeout);
 
-				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), options.port, NULL, 0)) {
+				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), options.port, NULL, options.client_flag)) {
 					mysql_close(my_conn);
 					my_conn = nullptr;
 					return false;
@@ -740,8 +712,16 @@ namespace daotk {
 
 			// wrapping of some functions
 
+			int set_server_option(enum_mysql_set_option option) {
+				return mysql_set_server_option(my_conn, option);
+			}
+
 			unsigned long long last_insert_id() const {
 				return mysql_insert_id(my_conn);
+			}
+
+			unsigned long long affected_rows() const {
+				return mysql_affected_rows(my_conn);
 			}
 
 			unsigned int error_code() const {
@@ -761,10 +741,11 @@ namespace daotk {
 				if (ret != 0) {
 					unsigned int error_no = mysql_errno(my_conn);
 					const char* error_msg = mysql_error(my_conn);
-					return results{ error_no, error_msg };
+					throw exception{ error_no, error_msg };
 				}
 
-				return results{ my_conn, mysql_store_result(my_conn) };
+				MYSQL_RES* myres = mysql_store_result(my_conn);
+				return results{ my_conn, myres };
 			}
 
 			// execute query with printf-style substitutions and return results
@@ -773,18 +754,54 @@ namespace daotk {
 				return query( format_string(fmt_str.c_str(), std::forward<Values>(values)...) );
 			}
 
-			// like query(), but no results returned
-			bool exec(const std::string& query_str) {
+			// multiple statement query execution
+			std::vector<results> mquery(const std::string& query_str) {
 				std::lock_guard<std::mutex> mg(mutex);
 
 				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
-				return ret == 0;
+				if (ret != 0) {
+					unsigned int error_no = mysql_errno(my_conn);
+					const char* error_msg = mysql_error(my_conn);
+					throw exception{ error_no, error_msg };
+				}
+
+				std::vector<results> res;
+				do {
+					MYSQL_RES* myres = mysql_store_result(my_conn);
+					if (myres != nullptr) res.push_back(results{ my_conn, myres });
+				} while (mysql_next_result(my_conn) == 0);
+
+				return std::move(res);
+			}
+
+			// multiple statement query execution with printf-style substitutions and return results
+			template <typename... Values>
+			std::vector<results> mquery(const std::string& fmt_str, Values... values) {
+				return mquery(format_string(fmt_str.c_str(), std::forward<Values>(values)...));
+			}
+
+			// like query(), but no results returned
+			void exec(const std::string& query_str) {
+				std::lock_guard<std::mutex> mg(mutex);
+
+				int ret = mysql_real_query(my_conn, query_str.c_str(), query_str.length());
+				if (ret != 0) {
+					unsigned int error_no = mysql_errno(my_conn);
+					const char* error_msg = mysql_error(my_conn);
+					throw exception{ error_no, error_msg };
+				}
+
+
+				// mysql_use_result must be called for SELECT, SHOW,...
+				// https://dev.mysql.com/doc/refman/8.0/en/mysql-use-result.html
+				MYSQL_RES* myres = mysql_use_result(my_conn);
+				if (myres != nullptr) mysql_free_result(myres);
 			}
 
 			// like query(), but no results returned
 			template <typename... Values>
-			bool exec(const std::string& fmt_str, Values... values) {
-				return exec(format_string(fmt_str.c_str(), std::forward<Values>(values)...) );
+			void exec(const std::string& fmt_str, Values... values) {
+				exec(format_string(fmt_str.c_str(), std::forward<Values>(values)...) );
 			}
 		};
 

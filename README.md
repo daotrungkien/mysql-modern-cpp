@@ -133,7 +133,23 @@ Of course, the-old-good-time-style loop is also possible:
 	}
 ```
 
-Prepared statements are also supported (thanks @Thalhammer):
+Use `mquery` to handle multiple queries, or queries that returns more than one dataset in an execution. Make sure to enable `CLIENT_MULTI_STATEMENTS` first using `connect_options::client_flags` when connecting, or using `set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON)` after connection:
+```cpp
+	my.set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON);
+	auto datasets = my.mquery("select count(*) from person; select id, name, weight from person");
+		
+	cout << datasets[0].get_value<int>(0) << endl;
+		
+	datasets[1].each([](int id, string name, optional<double> weight) {
+		cout << "ID: " << id << ", name: " << name;
+		if (weight) cout << ", weight: " << *weight;
+		cout << endl;
+		return true;
+	});
+```
+
+
+Prepared statements are also supported (thanks @Thalhammer for excellent implementation):
 ```cpp
 	prepared_stmt stmt(my, "select id, name, weight from person where weight > ? or weight is null");
 

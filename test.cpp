@@ -1,7 +1,7 @@
 #include <iostream>
 
 // uncomment the following line if needed:
-//#define NO_STD_OPTIONAL
+#define NO_STD_OPTIONAL
 #include "mysql+++/mysql+++.h"
 
 
@@ -43,12 +43,12 @@ int main()
 
 
 
-	int sample_count = 1;
+	int sample_count = 0;
 
 	try {
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// simple query and simple way to get back a single value
+		// Simple query and simple way to get back a single value:
 		auto row_count = my.query("select count(*) from person")
 							.get_value<int>();
 		cout << "Count: " << row_count << endl;
@@ -56,19 +56,18 @@ int main()
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// simple query without getting any value back (note that query() also
-		// works here but is less performant, as the returned `results' object
-		// when not stored is automatically destroyed)
-
+		// Simple query without getting any value back (note that query() also
+		// works here but is less performant, as the returned `result' object
+		// when not stored is automatically destroyed):
 		my.exec("update person set avatar = floor(rand()*10)");
 		cout << "Successful" << endl;
 
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
 		// 1) queries can be passed using convenient printf-style
 		// 2) optional type can be used to know whether the returned value is available
@@ -81,30 +80,38 @@ int main()
 
 	
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// example showing how to getting back multiple typed values in a row
+		// Example showing how to getting back multiple typed values in a row:
 		int id;
 		string name;
 		optional<double> weight;
 
-		auto res = my.query("select id, name, weight from person where id = %d", 3);
-		if (!res.is_empty()) {
-			res.fetch(id, name, weight);
+		{
+			auto res = my.query("select id, name, weight from person where id = %d", 3);
+			if (!res.is_empty()) {
+				res.fetch(id, name, weight);
 
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
-		} else cout << "Query failed" << endl;
+				cout << "ID: " << id << ", name: " << name;
+				if (weight) cout << ", weight: " << *weight;
+				cout << endl;
+			}
+			else cout << "Query failed" << endl;
+
+			// Note that the block makes `res` destroyed here, which causes `mysql_free_result()`
+			// called to ensure the safety for following queries. The alternative options are:
+			// - Call `res.free()` manually. In this way, `res` will not be useable.
+			// - Call `res.fetch()` to pull all query result and store locally. In this way,
+			// `res` can still be used while other queries are executed.
+		}
 
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// a multi-row data query using lambda function with row fields in parameter,
-		// note that optional type can also be used,
-		// datetime is a supoorting type is used for handing date and time
+		// A multi-row data query using lambda function with row fields in parameter:
+		// (`optional` type can also be used, and `datetime` is a supoorting type is used for handing date and time)
 		my.query("select id, name, weight, birthday from person")
 			.each([](int id, string name, optional<double> weight, optional<datetime> birthday) {
 				cout << "ID: " << id << ", name: " << name;
@@ -119,46 +126,50 @@ int main()
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// another way to iterate through rows using a container-like object
-		// (unsuccessful/no-result queries will return an empty container)
-		res = my.query("select id, name, weight from person");
-		for (auto& row : res.as_container<int, string, optional<double>>()) {
-			weight.reset();
-			tie(id, name, weight) = row;
+		// Another way to iterate through rows using a container-like object:
+		// (Note that unsuccessful/no-result queries will return an empty container)
+		{
+			auto res = my.query("select id, name, weight from person");
+			for (auto& row : res.as_container<int, string, optional<double>>()) {
+				weight.reset();
+				tie(id, name, weight) = row;
 
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
+				cout << "ID: " << id << ", name: " << name;
+				if (weight) cout << ", weight: " << *weight;
+				cout << endl;
+			}
 		}
 
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// of course, the-old-good-time-style loop is also possible:
-		res = my.query("select id, name, weight from person");
-		while (!res.eof()) {
-			weight.reset();
-			res.fetch(id, name, weight);
+		// Of course, the-old-good-time-style loop is also possible:
+		{
+			auto res = my.query("select id, name, weight from person");
+			while (!res.eof()) {
+				weight.reset();
+				res.fetch(id, name, weight);
 
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
+				cout << "ID: " << id << ", name: " << name;
+				if (weight) cout << ", weight: " << *weight;
+				cout << endl;
 
-			res.next();
+				res.next();
+			}
 		}
 
 
 
 
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// use `mquery' to handle multiple queries, or queries that returns more than one dataset in an execution;
-		// make sure to enable `CLIENT_MULTI_STATEMENTS' first using `connect_options::client_flags' when connecting, or
-		// using `set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON)' after connection
+		// Use `mquery` to handle multiple queries, or queries that returns more than one dataset in an execution;
+		// make sure to enable `CLIENT_MULTI_STATEMENTS' first using `connect_options::client_flags` when connecting, or
+		// using `set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON)` after connection
 		my.set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON);
 		auto datasets = my.mquery("select count(*) from person; select id, name, weight from person");
 		
@@ -174,9 +185,9 @@ int main()
 
 
 	
-		cout << "** QUERY EXAMPLE " << sample_count++ << endl;
+		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
-		// we also have support for prepared statements and binding
+		// We also have support for prepared statements and binding:
 		prepared_stmt stmt(my, "select id, name, weight from person where weight > ? or weight is null");
 
 		double pweight = 60;
@@ -190,9 +201,13 @@ int main()
 		}
 
 
-	} catch (daotk::mysql::exception exp) {
+	} catch (mysql_exception exp) {
+		cout << "Query #" << sample_count << " failed with error: " << exp.error_number() << " - " << exp.what() << endl;
+	}
+	catch (mysqlpp_exception exp) {
 		cout << "Query #" << sample_count << " failed with error: " << exp.what() << endl;
 	}
+
 
 	return 0;
 }

@@ -70,7 +70,7 @@ int main()
 		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
 		// 1) queries can be passed using convenient printf-style
-		// 2) optional type can be used to know whether the returned value is available
+		// 2) `optional` type can be used to know whether the returned value is available
 		auto avg_weight = my.query("select avg(weight) from person where avatar >= %d or weight <= %f", 2, 70.5)
 							.get_value<optional<double>>();
 		if (avg_weight)

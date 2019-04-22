@@ -45,7 +45,8 @@ Note that in the following examples, a table defined as follows is used:
 ```
 First, `#include <mysql+++.h>` whereever you want to use - Note that this is the ONLY step to do with your projects, nothing else!
 
-Establishing a connection by constructor, or by `connection::open()` function:
+
+### Establishing a connection by constructor, or by `connection::open()` function
 ```cpp
 	connection my{ "localhost", "tester", "tester", "test_test_test" };
 	if (!my) {
@@ -54,21 +55,25 @@ Establishing a connection by constructor, or by `connection::open()` function:
 	}
 ```
 
-Simple query and simple way to get back a single value:
+
+### Simple query and simple way to get back a single value
 ```cpp
 	auto row_count = my.query("select count(*) from person")
 						.get_value<int>();
 	cout << "Count: " << row_count << endl;
 ```
 
-Example of simple query without getting any value back using `exec()` (note that `query()` also works here but is less performant, as the returned `results` object when not stored is automatically destroyed):
+
+### Example of simple query without getting any value back using `exec()`
+Note that `query()` also works here but is less performant, as the returned `results` object when not stored is automatically destroyed.
 ```cpp
 	if (my.exec("update person set avatar = floor(rand()*10)"))
 		cout << "Successful" << endl;
 	else cout << "Failed" << endl;
 ```
 
-Queries can be passed using convenient printf-style, and optional type can be used to know whether the returned value is available:
+
+### Queries can be passed using convenient printf-style, and `optional` type can be used to know whether the returned value is available
 ```cpp
 	auto avg_weight = my.query("select avg(weight) from person where avatar >= %d or weight <= %f", 2, 70.5)
 						.get_value<optional<double>>();
@@ -77,10 +82,11 @@ Queries can be passed using convenient printf-style, and optional type can be us
 	else cout << "No mean weight value" << endl;
 ```
 
-Example showing how to getting back multiple typed values in a row, optional type is also used to handle nullable values:
-(Note that, the block makes `res` destroyed at the end, which causes `mysql_free_result()` called to ensure the safety for following queries. The alternative options are:
+
+### Example showing how to getting back multiple typed values in a row, `optional` type is also used to handle nullable values
+Note that, the block makes `res` destroyed at the end, which causes `mysql_free_result()` called to ensure the safety for following queries. The alternative options are:
 - Call `res.free()` manually. In this way, `res` will not be useable.
-- Call `res.fetch()` to pull all query result and store locally. In this way, `res` can still be used while other queries are executed.)
+- Call `res.fetch()` to pull all query result and store locally. In this way, `res` can still be used while other queries are executed.
 ```cpp
 	int id;
 	string name;
@@ -98,8 +104,9 @@ Example showing how to getting back multiple typed values in a row, optional typ
 	}
 ```
 
-A multi-row data query using lambda function with row fields in parameter:
-(Note that `optional` type can be used here as well, and `datetime` is a supporting type is used for handing date and time)
+
+### A multi-row data query using lambda function with row fields in parameter
+Note that `optional` type can be used here as well, and `datetime` is a supporting type is used for handing date and time.
 ```cpp
 	my.query("select id, name, weight, birthday from person")
 		.each([](int id, string name, optional<double> weight, optional<datetime> birthday) {
@@ -110,8 +117,9 @@ A multi-row data query using lambda function with row fields in parameter:
 		});
 ```
 
-Another way to iterate through rows using a container-like object:
-(Note that unsuccessful/no-result queries will return an empty container):
+
+### Another way to iterate through rows using a container-like object
+Note that unsuccessful/no-result queries will return an empty container.
 ```cpp
 	{
 		res = my.query("select id, name, weight from person");
@@ -122,7 +130,8 @@ Another way to iterate through rows using a container-like object:
 	}
 ```
 
-or in C++98 style:
+
+### or in C++98 style
 ```cpp
 	{
 		res = my.query("select id, name, weight from person");
@@ -134,7 +143,8 @@ or in C++98 style:
 	}
 ```
 
-Of course, the-old-good-time-style loop is also possible:
+
+### Of course, the-old-good-time-style loop is also possible
 ```cpp
 	{
 		res = my.query("select id, name, weight from person");
@@ -146,7 +156,9 @@ Of course, the-old-good-time-style loop is also possible:
 	}
 ```
 
-Use `mquery` to handle multiple queries, or queries that returns more than one dataset in an execution. Make sure to enable `CLIENT_MULTI_STATEMENTS` first using `connect_options::client_flags` when connecting, or using `set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON)` after connection:
+
+### Use `mquery` to handle multiple queries, or queries that returns more than one dataset in an execution
+Make sure to enable `CLIENT_MULTI_STATEMENTS` first using `connect_options::client_flags` when connecting, or using `set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON)` after connection.
 ```cpp
 	my.set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON);
 	auto datasets = my.mquery("select count(*) from person; select id, name, weight from person");
@@ -162,7 +174,9 @@ Use `mquery` to handle multiple queries, or queries that returns more than one d
 ```
 
 
-Prepared statements are also supported (thanks @Thalhammer for excellent implementation):
+### Prepared statements are also supported
+(Thanks @Thalhammer for excellent implementation)
+
 ```cpp
 	prepared_stmt stmt(my, "select id, name, weight from person where weight > ? or weight is null");
 

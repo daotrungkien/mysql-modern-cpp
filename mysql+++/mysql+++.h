@@ -69,7 +69,7 @@ namespace daotk {
 #endif
 
 
-		std::string format_string_vargs(const char* fmt_str, va_list args) {
+		inline std::string format_string_vargs(const char* fmt_str, va_list args) {
 			std::size_t size = 256;
 			std::vector<char> buf(size);
 
@@ -84,13 +84,14 @@ namespace daotk {
 			}
 		}
 
-		std::string format_string(const char* fmt_str, ...) {
+		inline std::string format_string(const char* fmt_str, ...) {
 			va_list vargs;
 			va_start(vargs, fmt_str);
 			std::string res = format_string_vargs(fmt_str, vargs);
 			va_end(vargs);
 			return std::move(res);
 		}
+
 
 
 		class mysql_exception : public std::exception {

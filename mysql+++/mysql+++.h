@@ -503,6 +503,9 @@ namespace daotk {
 
 			// go to nth row
 			void seek(std::size_t n) {
+				bool first_row_fetched = false;
+				if (!started)
+					first_row_fetched = true;
 				check_condition();
 
 				if (mode == mode_fetch) {
@@ -512,7 +515,8 @@ namespace daotk {
 
 				if (res == nullptr) throw mysqlpp_exception(mysqlpp_exception::empty_result);
 				mysql_data_seek(res, n);
-				row = mysql_fetch_row(res);
+				if (!first_row_fetched)
+					row = mysql_fetch_row(res);
 			}
 
 			// go to next row

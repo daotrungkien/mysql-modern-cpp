@@ -503,9 +503,7 @@ namespace daotk {
 
 			// go to nth row
 			void seek(std::size_t n) {
-				bool first_row_fetched = false;
-				if (!started)
-					first_row_fetched = true;
+				bool first_row_fetched = !started;
 				check_condition();
 
 				if (mode == mode_fetch) {

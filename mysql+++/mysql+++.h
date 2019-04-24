@@ -122,7 +122,6 @@ namespace daotk {
 		public:
 			enum error_code {
 				result_already_fetched,
-				result_already_started,
 				empty_result
 			};
 
@@ -312,12 +311,7 @@ namespace daotk {
 
 		protected:
 			MYSQL* my_conn = nullptr;
-			bool started = false;
-			enum { mode_store, mode_fetch } mode = mode_store;
-
-			// used only when `mode != mode_fetch'
-			MYSQL_RES* res = nullptr;
-			MYSQL_ROW row = nullptr;
+			bool fetched = false;
 
 			// used only when `mode == mode_fetch'
 			std::vector< std::vector<std::string> > rows;
@@ -328,25 +322,11 @@ namespace daotk {
 			result(MYSQL* _my_conn, bool fetch_now = false)
 				: my_conn(_my_conn)
 			{
-				if (fetch_now) {
-					mode = mode_fetch;
-					fetch();
-				}
+				if (fetch_now) fetch();
 			}
 
 			void check_condition() {
-				if (started) return;
-
-				switch (mode) {
-				case mode_store:
-					res = mysql_store_result(my_conn);
-					row = mysql_fetch_row(res);
-					break;
-				case mode_fetch:
-					fetch();
-				}
-
-				started = true;
+				if (!fetched) fetch();
 			}
 
 
@@ -379,17 +359,12 @@ namespace daotk {
 
 			result(result&& r) {
 				my_conn = r.my_conn;
-				mode = r.mode;
-				started = r.started;
-
-				res = r.res;
-				row = r.row;
+				fetched = r.fetched;
 
 				rows = std::move(r.rows);
 				current_row_itr = r.current_row_itr;
 
 				r.my_conn = nullptr;
-				r.res = nullptr;
 			}
 
 			virtual ~result() {
@@ -397,49 +372,27 @@ namespace daotk {
 			}
 
 			void free() {
-				if (!started) {
+				if (!fetched) {
 					// mysql_use_result must be called for SELECT, SHOW,...
 					// https://dev.mysql.com/doc/refman/8.0/en/mysql-use-result.html
 					MYSQL_RES* _res = mysql_use_result(my_conn);
-					if (_res != nullptr) mysql_free_result(res);
+					if (_res != nullptr) mysql_free_result(_res);
 				}
 				else {
-					if (res != nullptr) {
-						mysql_free_result(res);
-						res = nullptr;
-					}
-
 					rows.clear();
 				}
 
 				my_conn = nullptr;
-				started = false;
-			}
-
-			// use mysql_store_result() instead of mysql_use_result()
-			void store() {
-				if (mode == mode_fetch) throw mysqlpp_exception(mysqlpp_exception::result_already_fetched);
-				if (started) throw mysqlpp_exception(mysqlpp_exception::result_already_started);
-				mode = mode_store;
+				fetched = false;
 			}
 
 			// store result internally for further queries to avoid Error #2014 (Commands out of sync)
 			void fetch() {
-				MYSQL_RES* _res;
-				if (!started) {
-					_res = mysql_store_result(my_conn);
-				}
-				else {
-					if (mode == mode_fetch) throw mysqlpp_exception(mysqlpp_exception::result_already_fetched);
-
-					mysql_data_seek(res, 0);
-					_res = res;
-					res = nullptr;
-				}
+				if (fetched) throw mysqlpp_exception(mysqlpp_exception::result_already_fetched);
+				MYSQL_RES* _res = mysql_store_result(my_conn);
 
 				num_fields = mysql_num_fields(_res);
 				if (num_fields > 0) {
-
 					while (MYSQL_ROW _row = mysql_fetch_row(_res)) {
 						auto fetch_lengths = mysql_fetch_lengths(_res);
 						if (fetch_lengths == nullptr) throw mysql_exception{ my_conn };
@@ -455,26 +408,21 @@ namespace daotk {
 
 				mysql_free_result(_res);
 
-				mode = mode_fetch;
-				started = true;
+				fetched = true;
 			}
 
 			// return number of rows
 			std::size_t count() {
 				check_condition();
 
-				if (mode == mode_fetch) return rows.size();
-
-				return res == nullptr ? 0 : (std::size_t)mysql_num_rows(res);
+				return rows.size();
 			}
 
 			// return number of fields
 			unsigned int fields() {
 				check_condition();
 
-				if (mode == mode_fetch) return num_fields;
-
-				return res == nullptr ? 0 : mysql_num_fields(res);
+				return num_fields;
 			}
 
 			// return true if no data was returned
@@ -486,10 +434,7 @@ namespace daotk {
 			bool eof() {
 				check_condition();
 
-				if (mode == mode_fetch) return current_row_itr == rows.end();
-
-				if (res == nullptr) return true;
-				return row == nullptr;
+				return current_row_itr == rows.end();
 			}
 
 			// go to first row
@@ -501,52 +446,28 @@ namespace daotk {
 			void seek(std::size_t n) {
 				check_condition();
 
-				if (mode == mode_fetch) {
-					current_row_itr = rows.begin() + n;
-					return;
-				}
-
-				if (res == nullptr) throw mysqlpp_exception(mysqlpp_exception::empty_result);
-				mysql_data_seek(res, n);
-				row = mysql_fetch_row(res);
+				current_row_itr = rows.begin() + n;
 			}
 
 			// go to next row
 			void next() {
 				check_condition();
 
-				if (mode == mode_fetch) {
-					current_row_itr++;
-					return;
-				}
-
-				if (res == nullptr) throw mysqlpp_exception(mysqlpp_exception::empty_result);
-				row = mysql_fetch_row(res);
+				current_row_itr++;
 			}
 
 			// go to previous row
 			void prev() {
 				check_condition();
 
-				if (mode == mode_fetch) {
-					current_row_itr--;
-					return;
-				}
-
-				if (res == nullptr) throw mysqlpp_exception(mysqlpp_exception::empty_result);
-
-				auto cur = mysql_row_tell(res);
-				mysql_data_seek(res, (my_ulonglong)(cur - 1));
-				row = mysql_fetch_row(res);
+				current_row_itr--;
 			}
 
 			// return curent row index
 			std::size_t tell() {
 				check_condition();
 
-				if (mode == mode_fetch) return current_row_itr - rows.begin();
-
-				return (unsigned long long)mysql_row_tell(res);
+				return current_row_itr - rows.begin();
 			}
 
 			// iterate through all rows, each time execute the callback function
@@ -578,13 +499,8 @@ namespace daotk {
 			const char* get_field_data(int i) {
 				check_condition();
 
-				if (mode == mode_fetch) {
-					if (current_row_itr == rows.end() || (*current_row_itr)[i].empty()) return nullptr;
-					return (*current_row_itr)[i].c_str();
-				}
-
-				if (row == nullptr) return nullptr;
-				return row[i];
+				if (current_row_itr == rows.end() || (*current_row_itr)[i].empty()) return nullptr;
+				return (*current_row_itr)[i].c_str();
 			}
 
 			bool get_value(int i, bool& value) {
@@ -783,12 +699,7 @@ namespace daotk {
 			bool fetch(Values&... values) {
 				check_condition();
 
-				if (mode == mode_fetch) {
-					if (current_row_itr == rows.end()) return false;
-				}
-				else {
-					if (row == nullptr) return false;
-				}
+				if (current_row_itr == rows.end()) return false;
 
 				fetch_impl(0, std::forward<Values&>(values)...);
 				return true;

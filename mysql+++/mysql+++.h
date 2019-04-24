@@ -4,7 +4,7 @@ Modern C++ wrapper for MySQL with simple and convenient usage
 
 History:
 	VERSION     DATE			CHANGES
-	1.2.0.0		2019 Mar 05		Multiple-statement queries, `result' now fetches all in constructor
+	1.2.0.0		2019 Mar 05		Multiple-statement queries
 	1.1.0.0		2019 Mar 01		Prepared statements, error support in `result'
 	1.0.0.0		2017 Jan 22		First publication
 
@@ -313,7 +313,7 @@ namespace daotk {
 		protected:
 			MYSQL* my_conn = nullptr;
 			bool started = false;
-			enum { mode_use, mode_store, mode_fetch } mode = mode_use;
+			enum { mode_store, mode_fetch } mode = mode_store;
 
 			// used only when `mode != mode_fetch'
 			MYSQL_RES* res = nullptr;
@@ -338,10 +338,6 @@ namespace daotk {
 				if (started) return;
 
 				switch (mode) {
-				case mode_use:
-					res = mysql_use_result(my_conn);
-					row = mysql_fetch_row(res);
-					break;
 				case mode_store:
 					res = mysql_store_result(my_conn);
 					row = mysql_fetch_row(res);
@@ -538,6 +534,7 @@ namespace daotk {
 				}
 
 				if (res == nullptr) throw mysqlpp_exception(mysqlpp_exception::empty_result);
+
 				auto cur = mysql_row_tell(res);
 				mysql_data_seek(res, (my_ulonglong)(cur - 1));
 				row = mysql_fetch_row(res);

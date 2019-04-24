@@ -352,7 +352,6 @@ namespace daotk {
 		public:
 			result(const result& r) = delete;
 			void operator =(const result& r) = delete;
-			void operator =(const result&& r) = delete;
 
 			result() {
 			}
@@ -365,6 +364,20 @@ namespace daotk {
 				current_row_itr = r.current_row_itr;
 
 				r.my_conn = nullptr;
+				r.fetched = false;
+			}
+
+			void operator =(result&& r) {
+				free();
+
+				my_conn = r.my_conn;
+				fetched = r.fetched;
+
+				rows = std::move(r.rows);
+				current_row_itr = r.current_row_itr;
+
+				r.my_conn = nullptr;
+				r.fetched = false;
 			}
 
 			virtual ~result() {
@@ -373,10 +386,12 @@ namespace daotk {
 
 			void free() {
 				if (!fetched) {
-					// mysql_use_result must be called for SELECT, SHOW,...
-					// https://dev.mysql.com/doc/refman/8.0/en/mysql-use-result.html
-					MYSQL_RES* _res = mysql_use_result(my_conn);
-					if (_res != nullptr) mysql_free_result(_res);
+					if (my_conn != nullptr) {
+						// mysql_use_result must be called for SELECT, SHOW,...
+						// https://dev.mysql.com/doc/refman/8.0/en/mysql-use-result.html
+						MYSQL_RES* _res = mysql_use_result(my_conn);
+						if (_res != nullptr) mysql_free_result(_res);
+					}
 				}
 				else {
 					rows.clear();

@@ -84,23 +84,18 @@ Note that `query()` also works here but is less performant, as the returned `res
 
 
 ### Example showing how to getting back multiple typed values in a row, `optional` type is also used to handle nullable values
-Note that, the block makes `res` destroyed at the end, which causes `mysql_free_result()` called to ensure the safety for following queries. The alternative options are:
-- Call `res.free()` manually. In this way, `res` will not be useable.
-- Call `res.fetch()` to pull all query result and store locally. In this way, `res` can still be used while other queries are executed.
 ```cpp
 	int id;
 	string name;
 	optional<double> weight;
 
-	{
-		auto res = my.query("select id, name, weight from person where id = %d", 3);
-		if (res) {
-			res.fetch(id, name, weight);
+	auto res = my.query("select id, name, weight from person where id = %d", 3);
+	if (res) {
+		res.fetch(id, name, weight);
 
-			cout << "ID: " << id << ", name: " << name;
-			if (weight) cout << ", weight: " << *weight;
-			cout << endl;
-		}
+		cout << "ID: " << id << ", name: " << name;
+		if (weight) cout << ", weight: " << *weight;
+		cout << endl;
 	}
 ```
 
@@ -121,38 +116,32 @@ Note that `optional` type can be used here as well, and `datetime` is a supporti
 ### Another way to iterate through rows using a container-like object
 Note that unsuccessful/no-result queries will return an empty container.
 ```cpp
-	{
-		res = my.query("select id, name, weight from person");
-		for (auto row : res.as_container<int, string, optional<double>>()) {
-			tie(id, name, weight) = row;
-			// ...
-		}
+	res = my.query("select id, name, weight from person");
+	for (auto row : res.as_container<int, string, optional<double>>()) {
+		tie(id, name, weight) = row;
+		// ...
 	}
 ```
 
 
 ### or in C++98 style
 ```cpp
-	{
-		res = my.query("select id, name, weight from person");
-		auto ctn = res.as_container<int, string, optional<double>>();
-		for (auto i = ctn.begin(); i != ctn.end(); i++) {
-			tie(id, name, weight) = *i;
-			// ...
-		}
+	res = my.query("select id, name, weight from person");
+	auto ctn = res.as_container<int, string, optional<double>>();
+	for (auto i = ctn.begin(); i != ctn.end(); i++) {
+		tie(id, name, weight) = *i;
+		// ...
 	}
 ```
 
 
 ### Of course, the-old-good-time-style loop is also possible
 ```cpp
-	{
-		res = my.query("select id, name, weight from person");
-		while (!res.eof()) {
-			res.fetch(id, name, weight);
-			// ...
-			res.next();
-		}
+	res = my.query("select id, name, weight from person");
+	while (!res.eof()) {
+		res.fetch(id, name, weight);
+		// ...
+		res.next();
 	}
 ```
 

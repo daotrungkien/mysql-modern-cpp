@@ -87,23 +87,15 @@ int main()
 		string name;
 		optional<double> weight;
 
-		{
-			auto res = my.query("select id, name, weight from person where id = %d", 3);
-			if (!res.is_empty()) {
-				res.fetch(id, name, weight);
+		auto res = my.query("select id, name, weight from person where id = %d", 3);
+		if (!res.is_empty()) {
+			res.fetch(id, name, weight);
 
-				cout << "ID: " << id << ", name: " << name;
-				if (weight) cout << ", weight: " << *weight;
-				cout << endl;
-			}
-			else cout << "Query failed" << endl;
-
-			// Note that the block makes `res` destroyed here, which causes `mysql_free_result()`
-			// called to ensure the safety for following queries. The alternative options are:
-			// - Call `res.free()` manually. In this way, `res` will not be useable.
-			// - Call `res.fetch()` to pull all query result and store locally. In this way,
-			// `res` can still be used while other queries are executed.
+			cout << "ID: " << id << ", name: " << name;
+			if (weight) cout << ", weight: " << *weight;
+			cout << endl;
 		}
+		else cout << "Query failed" << endl;
 
 
 
@@ -130,16 +122,14 @@ int main()
 
 		// Another way to iterate through rows using a container-like object:
 		// (Note that unsuccessful/no-result queries will return an empty container)
-		{
-			auto res = my.query("select id, name, weight from person");
-			for (auto& row : res.as_container<int, string, optional<double>>()) {
-				weight.reset();
-				tie(id, name, weight) = row;
+		res = my.query("select id, name, weight from person");
+		for (auto& row : res.as_container<int, string, optional<double>>()) {
+			weight.reset();
+			tie(id, name, weight) = row;
 
-				cout << "ID: " << id << ", name: " << name;
-				if (weight) cout << ", weight: " << *weight;
-				cout << endl;
-			}
+			cout << "ID: " << id << ", name: " << name;
+			if (weight) cout << ", weight: " << *weight;
+			cout << endl;
 		}
 
 
@@ -148,18 +138,16 @@ int main()
 		cout << "** QUERY EXAMPLE " << ++sample_count << endl;
 
 		// Of course, the-old-good-time-style loop is also possible:
-		{
-			auto res = my.query("select id, name, weight from person");
-			while (!res.eof()) {
-				weight.reset();
-				res.fetch(id, name, weight);
+		res = my.query("select id, name, weight from person");
+		while (!res.eof()) {
+			weight.reset();
+			res.fetch(id, name, weight);
 
-				cout << "ID: " << id << ", name: " << name;
-				if (weight) cout << ", weight: " << *weight;
-				cout << endl;
+			cout << "ID: " << id << ", name: " << name;
+			if (weight) cout << ", weight: " << *weight;
+			cout << endl;
 
-				res.next();
-			}
+			res.next();
 		}
 
 

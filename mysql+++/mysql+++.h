@@ -105,7 +105,7 @@ namespace daotk {
 				err_msg = mysql_error(conn);
 			}
 
-			virtual const char* what() const {
+			virtual const char* what() const noexcept {
 				return err_msg.c_str();
 			}
 
@@ -136,7 +136,7 @@ namespace daotk {
 				err_msg = format_string("Error: %d", err);
 			}
 
-			virtual const char* what() const {
+			virtual const char* what() const noexcept {
 				return err_msg.c_str();
 			}
 
@@ -356,7 +356,7 @@ namespace daotk {
 			result() {
 			}
 
-			result(result&& r) {
+			result(result&& r) noexcept {
 				my_conn = r.my_conn;
 				fetched = r.fetched;
 
@@ -367,7 +367,7 @@ namespace daotk {
 				r.fetched = false;
 			}
 
-			void operator =(result&& r) {
+			void operator =(result&& r) noexcept {
 				free();
 
 				my_conn = r.my_conn;

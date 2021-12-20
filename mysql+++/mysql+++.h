@@ -727,13 +727,15 @@ namespace daotk {
 				const std::string &_server = "",
 				const std::string _username = "",
 				const std::string _password = "",
-				const std::string _dbname = "", 
+				const std::string _dbname = "",
 				unsigned int _timeout = 0,
 				bool _autoreconnect = false,
 				const std::string _init_command = "",
 				const std::string _charset = "",
 				unsigned int _port = 0,
-				unsigned long _client_flag = 0
+				unsigned long _client_flag = 0,
+				bool _ssl_enforce = false,
+				bool _ssl_verify_server_cert = false
 			) :	server(_server),
 				username(_username),
 				password(_password),
@@ -743,7 +745,9 @@ namespace daotk {
 				init_command(_init_command),
 				charset(_charset),
 				port(_port),
-				client_flag(_client_flag)
+				client_flag(_client_flag),
+				ssl_enforce(_ssl_enforce),
+				ssl_verify_server_cert(_ssl_verify_server_cert)
 			{}
 
 			std::string server;
@@ -756,6 +760,8 @@ namespace daotk {
 			std::string charset;
 			unsigned int port;
 			unsigned long client_flag;
+			bool ssl_enforce;
+			bool ssl_verify_server_cert;
 		};
 
 
@@ -778,13 +784,19 @@ namespace daotk {
 				my_conn = mysql_init(nullptr);
 				if (my_conn == nullptr) return false;
 
-				if (options.autoreconnect) { 
+				if (options.autoreconnect) {
 					my_bool b = options.autoreconnect;
 					mysql_options(my_conn, MYSQL_OPT_RECONNECT, &b);
 				}
 				if (!options.charset.empty()) mysql_options(my_conn, MYSQL_SET_CHARSET_NAME, options.charset.c_str());
 				if (!options.init_command.empty()) mysql_options(my_conn, MYSQL_INIT_COMMAND, options.init_command.c_str());
 				if (options.timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&options.timeout);
+
+				my_bool ssl_enforce = options.ssl_enforce;
+				mysql_options(my_conn, MYSQL_OPT_SSL_ENFORCE, &ssl_enforce);
+
+				my_bool ssl_verify = options.ssl_verify_server_cert;
+				mysql_options(my_conn, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify);
 
 				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), options.port, NULL, options.client_flag)) {
 					mysql_close(my_conn);

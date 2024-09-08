@@ -89,7 +89,7 @@ namespace daotk {
 			va_start(vargs, fmt_str);
 			std::string res = format_string_vargs(fmt_str, vargs);
 			va_end(vargs);
-			return std::move(res);
+			return res;
 		}
 
 
@@ -337,7 +337,7 @@ namespace daotk {
 			template <typename Function, typename... Values>
 			typename std::enable_if<(sizeof...(Values) < function_traits<Function>::arity), bool>::type
 				bind_and_call(Function&& callback, Values&&... values) {
-				nth_argument_type<Function, sizeof...(Values)> value;
+				nth_argument_type<Function, sizeof...(Values)> value{};
 				get_value(sizeof...(Values), value);
 
 				return bind_and_call(callback, std::forward<Values&&>(values)..., std::move(value));
@@ -727,7 +727,7 @@ namespace daotk {
 				const std::string &_server = "",
 				const std::string _username = "",
 				const std::string _password = "",
-				const std::string _dbname = "", 
+				const std::string _dbname = "",
 				unsigned int _timeout = 0,
 				bool _autoreconnect = false,
 				const std::string _init_command = "",
@@ -778,8 +778,8 @@ namespace daotk {
 				my_conn = mysql_init(nullptr);
 				if (my_conn == nullptr) return false;
 
-				if (options.autoreconnect) { 
-					my_bool b = options.autoreconnect;
+				if (options.autoreconnect) {
+					bool b = options.autoreconnect;
 					mysql_options(my_conn, MYSQL_OPT_RECONNECT, &b);
 				}
 				if (!options.charset.empty()) mysql_options(my_conn, MYSQL_SET_CHARSET_NAME, options.charset.c_str());
@@ -896,7 +896,7 @@ namespace daotk {
 					res.push_back(result{ my_conn, true });
 				} while (mysql_next_result(my_conn) == 0);
 
-				return std::move(res);
+				return res;
 			}
 
 			// multiple statement query execution with printf-style substitutions and return result
@@ -1220,7 +1220,7 @@ namespace daotk {
 				void set_variable(std::size_t idx, T& arg) {
 					if (idx >= _wrappers.size())
 						throw std::out_of_range("Invalid binding index");
-					auto wrap = std::make_unique<stmt_bind_detail::my_bind<T>>();
+					std::unique_ptr<stmt_bind_detail::my_bind<T>> wrap(new stmt_bind_detail::my_bind<T>());
 					wrap->data = &arg;
 					wrap->bind = &_binds_mysql[idx];
 					_wrappers[idx] = std::move(wrap);

@@ -25,7 +25,7 @@ Macro Flags:
 
 
 #pragma once
-
+#define my_bool bool
 
 #ifdef _MSC_VER
 #include <winsock.h>

@@ -4,16 +4,15 @@ Modern C++ wrapper for MySQL with simple and convenient usage
 
 History:
 	VERSION     DATE			CHANGES
-	1.2.0.0		2019 Mar 05		Multiple-statement queries
+	1.3.0.0		2025 Apr 09		SSL connection support
+ 	1.2.0.0		2019 Mar 05		Multiple-statement queries
 	1.1.0.0		2019 Mar 01		Prepared statements, error support in `result'
 	1.0.0.0		2017 Jan 22		First publication
 
 Author:
 	Dao Trung Kien			https://github.com/daotrungkien
 
-Contributors:
-	Dominik Thalhammer		https://github.com/Thalhammer
-	Samuel Borgman			https://github.com/sambrg
+Contributors: @Thalhammer, @sambrg, @amorphous1
 
 
 Macro Flags:
@@ -785,17 +784,17 @@ namespace daotk {
 				if (my_conn == nullptr) return false;
 
 				if (options.autoreconnect) {
-					my_bool b = options.autoreconnect;
+					bool b = options.autoreconnect;
 					mysql_options(my_conn, MYSQL_OPT_RECONNECT, &b);
 				}
 				if (!options.charset.empty()) mysql_options(my_conn, MYSQL_SET_CHARSET_NAME, options.charset.c_str());
 				if (!options.init_command.empty()) mysql_options(my_conn, MYSQL_INIT_COMMAND, options.init_command.c_str());
 				if (options.timeout > 0) mysql_options(my_conn, MYSQL_OPT_CONNECT_TIMEOUT, (char*)&options.timeout);
 
-				my_bool ssl_enforce = options.ssl_enforce;
+				bool ssl_enforce = options.ssl_enforce;
 				mysql_options(my_conn, MYSQL_OPT_SSL_ENFORCE, &ssl_enforce);
 
-				my_bool ssl_verify = options.ssl_verify_server_cert;
+				bool ssl_verify = options.ssl_verify_server_cert;
 				mysql_options(my_conn, MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &ssl_verify);
 
 				if (nullptr == mysql_real_connect(my_conn, options.server.c_str(), options.username.c_str(), options.password.c_str(), options.dbname.c_str(), options.port, NULL, options.client_flag)) {

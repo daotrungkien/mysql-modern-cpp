@@ -189,10 +189,10 @@ int main()
 		}
 
 
-	} catch (mysql_exception exp) {
+	} catch (const mysql_exception& exp) {
 		cout << "Query #" << sample_count << " failed with error: " << exp.error_number() << " - " << exp.what() << endl;
 	}
-	catch (mysqlpp_exception exp) {
+	catch (const mysqlpp_exception& exp) {
 		cout << "Query #" << sample_count << " failed with error: " << exp.what() << endl;
 	}
 

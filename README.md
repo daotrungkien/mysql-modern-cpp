@@ -10,7 +10,7 @@ Completely free. No restriction!
 - C++11 ready compiler - please check if your compiler is up to date (at the moment: MSVC 2015, g++ 5.1, clang 3.8)
 - MySQL Connector/C:
 	+ For Windows: https://dev.mysql.com/downloads/connector/c/
-	+ For Linux: `sudo apt-get install libmysqlclient`
+	+ For Linux: `sudo apt-get install libmysqlclient-dev`
 - No .cpp, no compiled library, no binary needed
 
 ## Credits:
@@ -151,9 +151,9 @@ Make sure to enable `CLIENT_MULTI_STATEMENTS` first using `connect_options::clie
 ```cpp
 	my.set_server_option(MYSQL_OPTION_MULTI_STATEMENTS_ON);
 	auto datasets = my.mquery("select count(*) from person; select id, name, weight from person");
-		
+
 	cout << datasets[0].get_value<int>(0) << endl;
-		
+
 	datasets[1].each([](int id, string name, optional<double> weight) {
 		cout << "ID: " << id << ", name: " << name;
 		if (weight) cout << ", weight: " << *weight;
